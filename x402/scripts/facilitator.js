@@ -281,6 +281,9 @@ const server = http.createServer(async (req, res) => {
       ],
       extensions: [],
       signers: { 'eip155:*': [wallet.address] },
+      // platform fee discovery: when bps > 0, clients must attach a second
+      // EIP-3009 authorization (feePayload) of `value * bps / 10000` to FEE_RECIPIENT
+      fee: { bps: FEE_BPS, recipient: FEE_RECIPIENT },
     });
   }
   if (req.method !== 'POST' || !['/verify', '/settle', '/settleBatch'].includes(req.url)) {
@@ -402,19 +405,31 @@ const server = http.createServer(async (req, res) => {
     feeSig = ethers.Signature.from(body.feePayload.signature);
   }
   try {
-    const tx = await token.transferWithAuthorization(
-      a.from, a.to, a.value, a.validAfter, a.validBefore, a.nonce, sig.v, sig.r, sig.s
+    // Submit the main + fee legs in parallel with explicit nonces so both
+    // settle in the same/consecutive blocks. Wall time ~= one tx instead of
+    // two — the public tunnel edge gives up on slow (>~5s) origins.
+    const baseNonce = await wallet.getNonce('pending');
+    const mainP = token.transferWithAuthorization(
+      a.from, a.to, a.value, a.validAfter, a.validBefore, a.nonce, sig.v, sig.r, sig.s,
+      { nonce: baseNonce }
     );
+    let feeP = null;
+    if (feeAuth) {
+      feeP = token.transferWithAuthorization(
+        feeAuth.from, feeAuth.to, feeAuth.value, feeAuth.validAfter, feeAuth.validBefore,
+        feeAuth.nonce, feeSig.v, feeSig.r, feeSig.s,
+        { nonce: baseNonce + 1 }
+      );
+      feeP.catch(() => {}); // avoid unhandled rejection if the main leg throws first
+    }
+    const tx = await mainP;
     const receipt = await tx.wait();
     if (receipt.status !== 1) throw new Error('tx reverted');
-    // fee leg settles after the main payment; a fee failure never fails the payment itself
+    // fee leg settles alongside the main payment; a fee failure never fails the payment itself
     let feeTx = null, feeError = null;
-    if (feeAuth) {
+    if (feeP) {
       try {
-        const ftx = await token.transferWithAuthorization(
-          feeAuth.from, feeAuth.to, feeAuth.value, feeAuth.validAfter, feeAuth.validBefore,
-          feeAuth.nonce, feeSig.v, feeSig.r, feeSig.s
-        );
+        const ftx = await feeP;
         const freceipt = await ftx.wait();
         if (freceipt.status !== 1) throw new Error('fee tx reverted');
         feeTx = ftx.hash;

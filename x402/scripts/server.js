@@ -155,7 +155,25 @@ const SERVICES = {
   },
 };
 
+// ---- platform fee discovery (from facilitator /supported) ----
+// When feeBps > 0, the 402 advertises it and payers must attach a second
+// EIP-3009 authorization (feePayload) of `price * bps / 10000` to feeRecipient,
+// on top of the merchant price. The merchant still receives the full price.
+let FEE = { bps: 0, recipient: '' };
+async function refreshFee() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 3000);
+    const r = await fetch(`${FACILITATOR}/supported`, { signal: ctl.signal });
+    clearTimeout(t);
+    const s = await r.json();
+    FEE = { bps: Number(s?.fee?.bps || 0), recipient: String(s?.fee?.recipient || '') };
+  } catch { FEE = { bps: 0, recipient: '' }; }
+  return FEE;
+}
+
 function requirements(svc) {
+  const fee = FEE.bps > 0 ? { feeBps: FEE.bps, feeRecipient: FEE.recipient } : {};
   return {
     x402Version: 1,
     error: 'Payment required: ' + svc.description,
@@ -170,12 +188,14 @@ function requirements(svc) {
       maxTimeoutSeconds: 300,
       asset: deployment.wusdc,
       extra: { name: 'Wrapped USD Coin', version: '1' },
+      ...fee,
     }],
   };
 }
 
 // x402 v2 PaymentRequired object (goes in the PAYMENT-REQUIRED response header).
 function requirementsV2(svc, u) {
+  const fee = FEE.bps > 0 ? { feeBps: FEE.bps, feeRecipient: FEE.recipient } : {};
   const out = {
     x402Version: 2,
     error: 'PAYMENT-SIGNATURE header is required',
@@ -200,6 +220,7 @@ function requirementsV2(svc, u) {
         facilitatorAddress: FACILITATOR_ADDR,
         unit: svc.unit, pricePerUnit: svc.pricePerUnit,
       },
+      ...fee, // platform fee (if any) is taken from the facilitator allowance on settle
     });
   } else {
     out.accepts.push({
@@ -210,6 +231,7 @@ function requirementsV2(svc, u) {
       payTo: SELLER,
       maxTimeoutSeconds: 300,
       extra: { name: 'Wrapped USD Coin', version: '1', assetTransferMethod: 'eip3009' },
+      ...fee,
     });
   }
   return out;
@@ -244,6 +266,7 @@ const server = http.createServer(async (req, res) => {
   const isV2Header = !!req.headers['payment-signature'];
   if (!paymentB64) {
     // 402: v1 body (unchanged, old clients keep working) + v2 PAYMENT-REQUIRED header
+    await refreshFee(); // advertise the current platform fee (if any)
     res.writeHead(402, {
       'Content-Type': 'application/json',
       'PAYMENT-REQUIRED': b64(requirementsV2(svc, u)),
@@ -251,14 +274,21 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(requirements(svc)));
     return;
   }
-  let paymentPayload;
+  let decoded;
   try {
-    paymentPayload = JSON.parse(Buffer.from(paymentB64, 'base64').toString('utf8'));
+    decoded = JSON.parse(Buffer.from(paymentB64, 'base64').toString('utf8'));
   } catch {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'malformed payment header' }));
     return;
   }
+  // Two client shapes are accepted:
+  //  A) { x402Version, scheme, network, payload, feePayload? }   (pikopay-client.js)
+  //  B) { paymentPayload: {...}, feePayload? }                   (piko-x402 buyer skill)
+  let paymentPayload = decoded;
+  if (decoded && decoded.paymentPayload && !decoded.payload) paymentPayload = decoded.paymentPayload;
+  await refreshFee(); // fee config may have changed since the client saw the 402
+  const feePayload = paymentPayload.feePayload || decoded.feePayload || null;
   const isV2 = isV2Header || paymentPayload.x402Version === 2;
 
   // ---- scheme: upto (v2 only). Meter AFTER running the handler, settle actual. ----
@@ -329,13 +359,20 @@ const server = http.createServer(async (req, res) => {
   const verifyBody = isV2
     ? { paymentPayload, paymentRequirements: paymentPayload.accepted }
     : { paymentPayload };
+  // feePayload was extracted during header decode (both client shapes).
+  if (FEE.bps > 0 && !feePayload) {
+    res.writeHead(402, { 'Content-Type': 'application/json', 'PAYMENT-REQUIRED': b64(requirementsV2(svc, u)) });
+    res.end(JSON.stringify({ ...requirements(svc), error: 'platform fee authorization required (feeBps/feeRecipient in accepts)' }));
+    return;
+  }
+  const settleBody = feePayload ? { ...verifyBody, feePayload } : verifyBody;
   const vr = await postJson(`${FACILITATOR}/verify`, verifyBody);
   if (!vr.isValid) {
     res.writeHead(402, { 'Content-Type': 'application/json', 'PAYMENT-REQUIRED': b64(requirementsV2(svc, u)) });
     res.end(JSON.stringify({ ...requirements(svc), error: `payment invalid: ${vr.invalidReason}` }));
     return;
   }
-  const sr = await postJson(`${FACILITATOR}/settle`, verifyBody);
+  const sr = await postJson(`${FACILITATOR}/settle`, settleBody);
   if (!sr.success) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: `settlement failed: ${sr.errorReason}` }));
