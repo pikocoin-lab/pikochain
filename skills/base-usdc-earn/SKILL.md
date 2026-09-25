@@ -22,8 +22,14 @@ BASE_NETWORK=base-sepolia PORT=8092 ./bin/base-seller
 # in another terminal, with YOUR OWN testnet key:
 BASE_TEST_KEY=0x... SERVICE_URL=http://127.0.0.1:8092/text-stats ./bin/base-buyer-test
 
-# 2. mainnet only after the testnet run settles cleanly
+# 2. mainnet for real money
 BASE_NETWORK=base PORT=8092 ./bin/base-seller
+
+> **LIVE (2026-09-25):** the seller is running on Base mainnet at
+> `https://pikobase.serveousercontent.com/text-stats` ($0.01/call, payTo
+> `0x3BD7d1505Ea03D1483044287f2246FF68231B277`). A 5-minute watchdog cron
+> (`base-mainnet-watchdog`) keeps the tunnel and seller alive. Discovery:
+> `/.well-known/x402` and `/llms.txt` on the same host.
 ```
 
 Default receiving address: `0x3BD7d1505Ea03D1483044287f2246FF68231B277`

@@ -7,6 +7,8 @@
  *   BASE_PRICE=10000       price per call in USDC atomic units (6 decimals; default $0.01)
  *   BASE_FACILITATOR_URL   default https://facilitator.xpay.sh
  *   BASE_NETWORK           default "base" (use "base-sepolia" for testnet-first runs)
+ *   BASE_PUBLIC_URL        public base URL for 402 `resource` fields
+ *                          (e.g. https://pikobase.serveousercontent.com)
  *   PORT                   default 8092
  *
  * Needs the `ethers` package: run `npm i ethers` in this skill dir, or set
@@ -41,6 +43,9 @@ const CFG = {
   facilitator: (process.env.BASE_FACILITATOR_URL || 'https://facilitator.xpay.sh').replace(/\/+$/, ''),
   network: process.env.BASE_NETWORK || 'base',
   port: parseInt(process.env.PORT || '8092', 10),
+  // Public base URL for the `resource` field in 402 quotes (e.g. the serveo
+  // tunnel URL). Falls back to the local address when unset.
+  publicUrl: (process.env.BASE_PUBLIC_URL || '').replace(/\/+$/, ''),
 };
 if (!ethers.isAddress(CFG.payTo)) {
   console.error('BASE_PAY_TO is not a valid address:', CFG.payTo);
@@ -90,7 +95,7 @@ function payRequirements(route, product) {
     scheme: 'exact',
     network: CFG.network,
     maxAmountRequired: product.price,
-    resource: `http://localhost:${CFG.port}${route}`,
+    resource: (CFG.publicUrl || `http://localhost:${CFG.port}`) + route,
     description: product.description,
     mimeType: 'application/json',
     payTo: CFG.payTo,
@@ -101,12 +106,17 @@ function payRequirements(route, product) {
   };
 }
 function send402(res, route, product) {
+  const requirements = payRequirements(route, product);
   const body = {
     x402Version: 1,
     error: `Payment required: ${product.description}`,
-    accepts: [payRequirements(route, product)],
+    accepts: [requirements],
   };
-  res.writeHead(402, { 'Content-Type': 'application/json' });
+  res.writeHead(402, {
+    'Content-Type': 'application/json',
+    // x402 spec: machine-readable requirements in the PAYMENT-REQUIRED header
+    'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(requirements)).toString('base64'),
+  });
   res.end(JSON.stringify(body));
 }
 function parseXPayment(req) {
@@ -135,9 +145,58 @@ function readBody(req) {
   });
 }
 
+function discoveryDoc() {
+  const base = CFG.publicUrl.replace(/\/$/, '');
+  return {
+    x402Version: 1,
+    name: 'pikobase',
+    description: 'Paid micro-APIs on Base mainnet, settled in native USDC via x402 (EIP-3009, gasless for buyer).',
+    facilitator: CFG.facilitator,
+    endpoints: Object.entries(PRODUCTS).map(([path, p]) => ({
+      path,
+      url: base + path,
+      method: 'POST',
+      price: `$${(Number(p.price) / 1e6).toFixed(2)}`,
+      network: CFG.network,
+      asset: ASSET,
+      payTo: CFG.payTo,
+      description: p.description,
+    })),
+  };
+}
+const LLMS_TXT = `# pikobase — paid micro-APIs on Base mainnet
+
+Pay per call in native USDC (6 decimals) via the x402 protocol. No API key, no account.
+Buyer signs an EIP-3009 authorization (gasless — the facilitator submits it).
+
+## How to call
+1. GET https://pikobase.serveousercontent.com/text-stats?quote=1  → 200 with price quote (also returned as HTTP 402 on unpaid POST)
+2. Sign EIP-3009 TransferWithAuthorization for the quoted amount (see quote.accept[0]: network, asset, payTo, maxAmountRequired, extra.name/version for the EIP-712 domain)
+3. POST the endpoint with header X-PAYMENT: base64({"x402Version":1,"scheme":"exact","network":"base","payload":{"signature","authorization"}})
+4. HTTP 200 + JSON result. Settlement tx hash returned in X-SUCCESS header.
+
+## Endpoints
+- POST /text-stats — $0.01/call. Input {"text":"..."}. Returns word/character counts, reading time, script-based language hint.
+
+## Discovery
+- /.well-known/x402 (machine-readable)
+- Facilitator: https://facilitator.xpay.sh
+- Network: base (chain id 8453). Asset: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 (native USDC)
+`;
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const route = url.pathname;
+  if (route === '/.well-known/x402' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(discoveryDoc(), null, 2));
+    return;
+  }
+  if (route === '/llms.txt' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(LLMS_TXT);
+    return;
+  }
   const product = PRODUCTS[route];
   if (!product) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -154,18 +213,25 @@ const server = http.createServer(async (req, res) => {
   if (!paymentPayload) { send402(res, route, product); return; }
   try {
     const v = await facilitator('/verify', { paymentPayload, paymentRequirements });
-    if (!v || v.isValid !== true) { send402(res, route, product); return; }
+    if (!v || v.isValid !== true) {
+      console.log(`[verify-fail] ${new Date().toISOString()} ${route} reason=${v && (v.invalidReason || v.error)}`);
+      send402(res, route, product); return;
+    }
     const input = await readBody(req);
     const result = await product.handler(input);
     const s = await facilitator('/settle', { paymentPayload, paymentRequirements });
     const tx = s && (s.transaction || s.txHash);
-    if (!tx) { send402(res, route, product); return; }
+    if (!tx) {
+      console.log(`[settle-fail] ${new Date().toISOString()} ${route} reason=${s && (s.errorReason || s.error || JSON.stringify(s)).toString().slice(0,200)}`);
+      send402(res, route, product); return;
+    }
     const payer = (paymentPayload.payload && paymentPayload.payload.authorization && paymentPayload.payload.authorization.from) || '?';
     console.log(`[paid] ${new Date().toISOString()} ${route} payer=${trunc(payer)} amount=${product.price} tx=${tx}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ result, settlement: { transaction: tx, network: CFG.network, payer } }));
   } catch (e) {
     // never leak the result on any failure path
+    console.log(`[error] ${new Date().toISOString()} ${route} ${e && e.message}`);
     send402(res, route, product);
   }
 });
