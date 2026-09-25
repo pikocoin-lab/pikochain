@@ -33,12 +33,13 @@ Arc 上 1 USDC 有两种表示：原生 18 位（gas/余额） vs ERC-20 6 位�
 ## 部署步骤（需用户钱包操作）
 
 1. 准备一个有 **USDC（Arc 上）** 的钱包（部署 gas 也是 USDC，极便宜）
-2. 运行部署脚本（私钥只走环境变量，不落地）：
+2. 运行通用部署脚本（私钥只走环境变量，不落地）：
    ```bash
    cd ~/workspace/my-chain/evm
-   ARC_PRIVATE_KEY=0x... NODE_PATH=~/workspace/my-chain/x402/node_modules \
-     node scripts/deploy_htlc_arc.js
+   HTLC_PRIVATE_KEY=0x... NODE_PATH=~/workspace/my-chain/x402/node_modules \
+     node scripts/deploy_htlc.js arc
    ```
+   所有对手链共用这一个脚本，网络参数在 `networks.json` 里。
 3. 把输出的合约地址填进 `bridge.html` 的"对方链 HTLC"配置，即可发起
    PikoChain ↔ Arc 原子交换
 
