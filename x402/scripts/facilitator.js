@@ -40,6 +40,17 @@ function expectedFee(value) {
   return (BigInt(value) * BigInt(FEE_BPS)) / 10000n; // round down; dust -> 0 = no fee
 }
 
+// ---- bounty faucet: one $0.05 test-wUSDC grant per address (Moltbook bounty) ----
+// Enabled only with X402_BOUNTY_ENABLED=1. Test tokens only (zero real backing).
+const BOUNTY_ENABLED = process.env.X402_BOUNTY_ENABLED === '1';
+const BOUNTY_AMOUNT = 50000n; // $0.05 wUSDC
+const BOUNTY_DB = path.join(__dirname, '../bounty-claims.json');
+let bountyClaimed = new Set();
+try { bountyClaimed = new Set(JSON.parse(fs.readFileSync(BOUNTY_DB, 'utf8'))); } catch {}
+function bountySave() {
+  try { fs.writeFileSync(BOUNTY_DB, JSON.stringify([...bountyClaimed])); } catch {}
+}
+
 const DOMAIN = {
   name: 'Wrapped USD Coin',
   version: '1',
@@ -106,8 +117,26 @@ async function verifyPayload(pp, expect) {
 }
 
 const server = http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/bounty') {
+    let body;
+    try { body = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+    if (!BOUNTY_ENABLED) return send(res, 403, { error: 'bounty faucet disabled' });
+    const addr = String(body.address || '');
+    if (!ethers.isAddress(addr)) return send(res, 400, { error: 'bad address' });
+    const a = addr.toLowerCase();
+    if (bountyClaimed.has(a)) return send(res, 400, { error: 'already claimed' });
+    try {
+      const tx = await token.transfer(a, BOUNTY_AMOUNT);
+      const receipt = await tx.wait();
+      if (receipt.status !== 1) throw new Error('tx reverted');
+      bountyClaimed.add(a); bountySave();
+      return send(res, 200, { success: true, transaction: tx.hash, amount: BOUNTY_AMOUNT.toString() });
+    } catch (e) {
+      return send(res, 500, { success: false, errorReason: String(e.message || e).slice(0, 200) });
+    }
+  }
   if (req.method !== 'POST' || !['/verify', '/settle', '/settleBatch'].includes(req.url)) {
-    return send(res, 404, { error: 'use POST /verify, /settle or /settleBatch' });
+    return send(res, 404, { error: 'use POST /verify, /settle, /settleBatch or /bounty' });
   }
   let body;
   try { body = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }

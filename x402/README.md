@@ -39,7 +39,6 @@ Services: facilitator `:8090` (`/verify`, `/settle`, `/settleBatch`), demo resou
   (+0.03 wUSDC, 1 tx); sender refunded 0.97 remainder after expiry (`demo_stream.js`).
 
 ## Facilitator fee (revenue mechanism)
-
 The facilitator can take a per-settlement cut, configured by env vars:
 
 ```bash
@@ -63,6 +62,15 @@ X402_FEE_RECIPIENT=0x...   # who receives the fee. Default: facilitator's own wa
   fails the payment itself (`feeError` is reported in the response).
 - `/settleBatch`: each item may carry its own `feePayload`; fees settle in one
   batch tx via `PikoPaySettler`.
+
+## Bounty faucet (test wUSDC)
+
+`POST /x402/bounty` → `{ "address": "0x..." }` grants **$0.05 test wUSDC**, one claim
+per address (tracked in `bounty-claims.json`). Enabled only with
+`X402_BOUNTY_ENABLED=1` (default off). Lets anyone try the x402 demo without
+needing funds first. The public gateway proxies it at
+`https://pikochain.serveousercontent.com/x402/bounty`, alongside `/x402/verify`,
+`/x402/settle`, `/x402/settleBatch` and `/x402/insight` (see `../evm/gateway.py`).
 
 ## Run
 
