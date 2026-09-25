@@ -1,0 +1,65 @@
+{
+  "config": {
+    "chainId": 2049,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "clique": {
+      "period": 2,
+      "epoch": 30000
+    }
+  },
+  "nonce": "0x0",
+  "timestamp": "0x0",
+  "extraData": "0x0000000000000000000000000000000000000000000000000000000000000000c4c319e7f366224f2ff2bbb8b8fc0c2de5b990840000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "gasLimit": "0x1c9c380",
+  "difficulty": "0x1",
+  "alloc": {
+    "0x30514237625b9e4206c728ff551725b4bf9d4a85": {
+      "balance": "0xd3c21bcecceda1000000"
+    },
+    "0x3BD7d1505Ea03D1483044287f2246FF68231B277": {
+      "balance": "0x3635c9adc5dea00000"
+    },
+    "0xc4C319e7f366224F2Ff2BbB8b8Fc0c2De5B99084": {
+      "balance": "0xd3c21bcecceda1000000"
+    },
+    "0x06707b2ce203ed9fb0ed3cd1f30e34b5bfd7e29a": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x5ea915d223debaa4c36bfe0157a228c015b90338": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x3cacf524e814b3ee395ab533969ed93c7e8a9835": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x0714dacd828d92b59c15bc946c3524b833209057": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x9d6ca39909fb286f1291660ac2b4a76a63a5a47f": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0xeddc1913e092f8cc7c505b7400969c3a11bbdf75": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x95d3f80128f0c3aeac649d8482df671f92bb5110": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0xb8b37d1d83580e867da1ca2a7da7db99708cef1c": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x1257e0667d29232d5c92f665d2a0c4473133429f": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "0x73410b02ccd1b72c06209f424b1e2472008fff6a": {
+      "balance": "0x21e19e0c9bab2400000"
+    }
+  }
+}

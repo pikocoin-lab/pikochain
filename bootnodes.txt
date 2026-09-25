@@ -1,0 +1,12 @@
+# PikoChain bootnodes (enode URLs, one per line)
+# Public P2P peering opens soon — add your bootnode enode here and every
+# node in the world will auto-discover the network on restart.
+#
+# Format:
+#   enode://<pubkey>@<host>:<port>
+#
+# --- LIVE BOOTNODES (mainnet) ---
+# (coming soon — VPS bootnode deployment in progress)
+
+# --- Reserve / community bootnodes ---
+# Add yours via PR ♻️

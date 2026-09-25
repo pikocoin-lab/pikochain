@@ -1,0 +1,23 @@
+services:
+  pikochain:
+    # Official image (built by CI on every release):
+    image: pikochain/node:latest
+    # …or build locally:
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
+    container_name: pikochain
+    restart: unless-stopped
+    ports:
+      - "8545:8545"    # JSON-RPC
+      - "8546:8546"    # WebSocket
+      - "30303:30303"  # P2P TCP
+      - "30303:30303/udp" # P2P discovery
+    volumes:
+      - pikochain-data:/pikochain/data
+    environment:
+      # Add extra bootnodes without editing files:
+      # - EXTRA_BOOTNODES=enode://<pubkey>@<host>:30303
+
+volumes:
+  pikochain-data:
