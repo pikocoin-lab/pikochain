@@ -18,7 +18,7 @@ contract PikoUSDVault {
     IERC20 public immutable usdc;
 
     event Locked(address indexed user, uint256 amount);
-    event Released(address indexed to, uint256 amount);
+    event Released(address indexed to, uint256 amount, bytes32 indexed pikoBurnTx);
     event OperatorChanged(address indexed newOperator);
 
     modifier onlyOwner() { require(msg.sender == owner, "not owner"); _; }
@@ -39,10 +39,11 @@ contract PikoUSDVault {
     }
 
     /// @notice Release USDC after wUSDC was burned on PikoChain (ReleaseRequested).
-    function release(address to, uint256 amount) external onlyOperator {
+    /// @param pikoBurnTx tx hash of the burnForRelease on PikoChain, for audit trail (audit B-2).
+    function release(address to, uint256 amount, bytes32 pikoBurnTx) external onlyOperator {
         require(to != address(0) && amount > 0, "bad params");
         require(usdc.transfer(to, amount), "release failed");
-        emit Released(to, amount);
+        emit Released(to, amount, pikoBurnTx);
     }
 
     function setOperator(address _operator) external onlyOwner {

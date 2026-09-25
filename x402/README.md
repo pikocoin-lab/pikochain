@@ -18,7 +18,7 @@ Deployed (2026-09-25):
 | Contract | Address |
 |---|---|
 | wUSDC v2 (EIP-3009, 6 decimals) | `0x83de4653D2851Ff2175e71683054B876ABA55533` |
-| PikoUSDBridge (sole minter) | `0x83974f7C8BcEC5Dd603dF1B2848e5ECC38b8F38c` |
+| PikoUSDBridge (sole minter) | `0x741221564B5b704CfDC5f96D5e01DB5c541F104f` |
 
 > **Issuance is rule-bound since 2026-09-25:** only the bridge can mint v2, 1:1
 > against USDC locked on Base. v1 (`0x68ac95…53385`) was an owner-mint test token

@@ -19,6 +19,10 @@ contract PikoUSDBridge {
     address public vault; // PikoUSDVault on Base (set when deployed; informational for watchers)
     IWUSDCv2 public immutable wusdc;
 
+    /// @notice Base lock tx hashes already attested. Prevents double-mint on
+    ///         watcher replay/restart (audit B-1).
+    mapping(bytes32 => bool) public processedTx;
+
     event MintAttested(address indexed to, uint256 amount, bytes32 indexed baseTxHash);
     event ReleaseRequested(address indexed user, uint256 amount, address indexed baseRecipient);
     event OperatorChanged(address indexed newOperator);
@@ -35,8 +39,11 @@ contract PikoUSDBridge {
     }
 
     /// @notice Mint wUSDC 1:1 against USDC locked on Base. Operator attests the Base lock.
+    /// @dev baseTxHash is deduplicated: the same Base lock can never mint twice.
     function mint(address to, uint256 amount, bytes32 baseTxHash) external onlyOperator {
         require(to != address(0) && amount > 0, "bad params");
+        require(!processedTx[baseTxHash], "already processed");
+        processedTx[baseTxHash] = true;
         wusdc.mint(to, amount);
         emit MintAttested(to, amount, baseTxHash);
     }

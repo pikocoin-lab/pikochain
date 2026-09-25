@@ -10,13 +10,18 @@ real mainnet coin. v2 fixes issuance at the contract level.
 | Contract | Address | Chain |
 |---|---|---|
 | wUSDC v2 (EIP-3009) | `0x83de4653D2851Ff2175e71683054B876ABA55533` | PikoChain |
-| PikoUSDBridge (sole minter) | `0x83974f7C8BcEC5Dd603dF1B2848e5ECC38b8F38c` | PikoChain |
+| PikoUSDBridge (sole minter) | `0x741221564B5b704CfDC5f96D5e01DB5c541F104f` | PikoChain |
 | PikoUSDVault | _not deployed yet_ | Base |
 
 - `WUSDCv2.mint` is `onlyMinter`; minter = bridge. Verified on-chain: direct
   owner mint reverts (`not minter`).
 - `PikoUSDBridge.mint(to, amount, baseTxHash)` is `onlyOperator`; the operator
   attests the Base lock (tx hash in the event for auditability).
+- Replay protection (audit 2026-09-25): `mint` records `processedTx[baseTxHash]` —
+  the same Base lock can never mint twice, even on watcher replay/restart.
+  Verified on-chain: second mint with the same hash reverts (`already processed`).
+- `PikoUSDVault.release(to, amount, pikoBurnTx)` carries the PikoChain burn tx hash
+  in the `Released` event for independent audit trail.
 - `burnForRelease(amount, baseRecipient)`: burns v2 on PikoChain, emits
   `ReleaseRequested`; operator releases real USDC on Base.
 - v2 genesis supply: **0**. v1 test supply (13,000) was moved to the dead address;
