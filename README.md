@@ -106,6 +106,20 @@ const res = await pay('http://service:8091/api/insight', agentWallet);
 
 Full code, contracts, facilitator and demos: [`x402/`](x402/).
 
+## 🔄 PikoSwap — the DEX
+
+Uniswap V2-style AMM (`x * y = k`, 0.3% LP fee). On a ~zero-fee chain, LPs add,
+remove and rebalance for free.
+
+| Contract | Address |
+|---|---|
+| WPIKO (wrapped native) | `0xC5Fb63d16c1ad8c9037b5B9f5FE5406fAccD33a3` |
+| PikoSwapFactory | `0x8A2d8E64265a3B0d1c2E83910DB35aBAFd6465E9` |
+| PikoSwapRouter | `0x9B36b978B8cd421405a235bBFd3CbA5B875EC920` |
+| WPIKO/wUSDC pair | `0x72Ea1C0282a3B92209796C4456b4BE36d1864445` |
+
+Genesis pool: 1000 WPIKO + 1000 wUSDC. Code and verified swap demos: [`dex/`](dex/).
+
 ## 🗺️ Roadmap
 
 - [x] EVM chain live (geth 1.13.9, Clique PoA)
