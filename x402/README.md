@@ -17,7 +17,13 @@ Deployed (2026-09-25):
 
 | Contract | Address |
 |---|---|
-| wUSDC (EIP-3009, 6 decimals) | `0x68ac954700Fc1D0592721f1A5e785A8393253385` |
+| wUSDC v2 (EIP-3009, 6 decimals) | `0x83de4653D2851Ff2175e71683054B876ABA55533` |
+| PikoUSDBridge (sole minter) | `0x83974f7C8BcEC5Dd603dF1B2848e5ECC38b8F38c` |
+
+> **Issuance is rule-bound since 2026-09-25:** only the bridge can mint v2, 1:1
+> against USDC locked on Base. v1 (`0x68ac95…53385`) was an owner-mint test token
+> and is retired (supply moved to dead address). See [`../bridge/`](../bridge/).
+> v2 supply is 0 until the first real USDC locks in the Base vault.
 | PikoPayRegistry | `0x7aE738fA0652761cFd0347b8D387461877417a74` |
 | PikoStream | `0xd41D40e307192695c759E57dAc0Dfc880a8F049e` |
 | PikoPaySettler | `0x5BeA82AE1473A8dc8c9cAB528604D9153d4216dc` |

@@ -27,7 +27,11 @@ demo_swap). `solc` compiles with `evmVersion: london` (PikoChain genesis is pre-
 
 ## Honest boundaries
 
-- Demo wUSDC is owner-minted test token, not real USDC — pool price is
+- **Pool unwound 2026-09-25** during the v1→v2 migration: the WPIKO/v1-wUSDC pool
+  traded an unbacked test token at a posted $1 price, so its liquidity was
+  removed and the v1 supply burned to the dead address. Re-seed with v2 once
+  real USDC backs it.
+- Demo wUSDC v1 was owner-minted test token, not real USDC — pool price was
   illustrative until real USDC bridges in via PikoHTLC.
 - Single pool, no concentrated liquidity (V3 comes with real volume).
 - No frontend yet; interaction via scripts / direct contract calls.

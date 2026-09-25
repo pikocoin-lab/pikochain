@@ -15,7 +15,7 @@ const artifacts = JSON.parse(fs.readFileSync(path.join(__dirname, '../artifacts.
 
 const provider = new ethers.JsonRpcProvider(RPC);
 const wallet = new ethers.Wallet(keys.facilitator.privateKey, provider);
-const token = new ethers.Contract(deployment.wusdc, artifacts.WUSDC.abi, wallet);
+const token = new ethers.Contract(deployment.wusdc, artifacts.WUSDCv2.abi, wallet);
 const settler = deployment.settler
   ? new ethers.Contract(deployment.settler, artifacts.PikoPaySettler.abi, wallet)
   : null;

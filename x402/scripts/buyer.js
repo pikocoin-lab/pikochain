@@ -10,7 +10,7 @@ const RPC = 'http://127.0.0.1:8545';
 const deployment = JSON.parse(fs.readFileSync(path.join(__dirname, '../deployment.json'), 'utf8'));
 const keys = JSON.parse(fs.readFileSync(path.join(__dirname, '../demo-keys.json'), 'utf8'));
 const artifacts = JSON.parse(fs.readFileSync(path.join(__dirname, '../artifacts.json'), 'utf8'));
-const abi = artifacts.WUSDC.abi;
+const abi = artifacts.WUSDCv2.abi;
 
 async function main() {
   const provider = new ethers.JsonRpcProvider(RPC);

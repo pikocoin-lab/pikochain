@@ -1,11 +1,13 @@
 {
   "chainId": 2049,
   "network": "eip155:2049",
-  "wusdc": "0x68ac954700Fc1D0592721f1A5e785A8393253385",
+  "wusdc": "0x83de4653D2851Ff2175e71683054B876ABA55533",
   "deployer": "0xc4c319e7f366224f2ff2bbb8b8fc0c2de5b99084",
   "rpc": "http://127.0.0.1:8545",
   "registry": "0x7aE738fA0652761cFd0347b8D387461877417a74",
   "stream": "0xd41D40e307192695c759E57dAc0Dfc880a8F049e",
   "settler": "0x5BeA82AE1473A8dc8c9cAB528604D9153d4216dc",
-  "demoServiceId": "0xa6911aca3b1756aee85c3def8f98b0237437015fba2a805ffdda7d77d273baa1"
+  "demoServiceId": "0xa6911aca3b1756aee85c3def8f98b0237437015fba2a805ffdda7d77d273baa1",
+  "wusdc_v1_legacy": "0x68ac954700Fc1D0592721f1A5e785A8393253385",
+  "bridge": "0x83974f7C8BcEC5Dd603dF1B2848e5ECC38b8F38c"
 }
