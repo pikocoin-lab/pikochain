@@ -80,6 +80,32 @@ assert w3.eth.chain_id == 2049
 # faucet.claim() → 100 PIKO → stake → earn. You're on-chain. 🎉
 ```
 
+## 💸 PikoPay — the AI payment network
+
+Four layers, one goal: agents paying agents at machine speed, ~zero fees.
+
+| Layer | What |
+|---|---|
+| One-shot | x402 `402 → sign → X-PAYMENT → 200` (EIP-3009, buyer pays zero gas) |
+| Streaming | `PikoStream` payment channels — off-chain signed vouchers in 1–3ms, per-second billing |
+| Batch | `PikoPaySettler` — N payments settled in **one** transaction |
+| Discovery | `PikoPayRegistry` — on-chain service directory (endpoint + price) |
+
+| Contract | Address |
+|---|---|
+| wUSDC (EIP-3009) | `0x68ac954700Fc1D0592721f1A5e785A8393253385` |
+| PikoPayRegistry | `0x7aE738fA0652761cFd0347b8D387461877417a74` |
+| PikoStream | `0xd41D40e307192695c759E57dAc0Dfc880a8F049e` |
+| PikoPaySettler | `0x5BeA82AE1473A8dc8c9cAB528604D9153d4216dc` |
+
+```js
+// One line to pay any PikoPay service:
+const { pay } = require('./x402/scripts/pikopay-client');
+const res = await pay('http://service:8091/api/insight', agentWallet);
+```
+
+Full code, contracts, facilitator and demos: [`x402/`](x402/).
+
 ## 🗺️ Roadmap
 
 - [x] EVM chain live (geth 1.13.9, Clique PoA)
@@ -104,6 +130,7 @@ assert w3.eth.chain_id == 2049
 ├── scripts/
 │   ├── install.sh        # one-liner installer
 │   └── node.sh           # node manager (start/stop/logs/status)
+├── x402/                 # 💸 PikoPay: AI payment network (contracts, facilitator, demos)
 └── .github/workflows/    # CI: builds & publishes the image
 ```
 
