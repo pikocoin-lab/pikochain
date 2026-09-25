@@ -131,6 +131,7 @@ const { JSDOM } = require('jsdom');
 const { Readability } = require('@mozilla/readability');
 const TurndownService = require('turndown');
 const dns = require('dns').promises;
+const { edgarHandler, edgarValidate } = require('./edgar.js');
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
 
 function isPrivateIP(ip) {
@@ -280,6 +281,16 @@ const SERVICES = {
     price: '10000',
     description: 'Web intelligence: URL -> clean markdown + metadata + tech-stack + outbound links - $0.01 per call',
     resource: `${PUBLIC}/x402/extract`, handler: extractHandler, validate: extractValidate,
+  },
+  // edgar: SEC EDGAR fundamentals. POST JSON {"ticker":"AAPL"} (or {"cik":"320193"},
+  // ?ticker=..., &filingType=10-K|10-Q). Returns company/CIK, latest filing metadata
+  // + key XBRL financials (Revenue/Net Income/Total Assets, latest 10-K annual).
+  // Free upstream (data.sec.gov, no key); upstream is probed in validate, so a dead
+  // SEC never results in a charge. $0.05/call.
+  '/api/edgar': {
+    price: '50000',
+    description: 'SEC EDGAR fundamentals: ticker -> latest 10-K/10-Q filing + XBRL financials (Revenue/Net Income/Assets) - $0.05 per call',
+    resource: `${PUBLIC}/x402/edgar`, handler: edgarHandler, validate: edgarValidate,
   },
   // x402 v2 showcase: metered translation, scheme "upto".
   // Client authorizes a MAX ($0.10); server settles the ACTUAL metered amount

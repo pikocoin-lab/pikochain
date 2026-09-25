@@ -1,0 +1,314 @@
+{
+ "AAPL": {
+  "cik": "0000320193",
+  "name": "Apple Inc."
+ },
+ "MSFT": {
+  "cik": "0000789019",
+  "name": "MICROSOFT CORP"
+ },
+ "TSLA": {
+  "cik": "0001318605",
+  "name": "Tesla, Inc."
+ },
+ "NVDA": {
+  "cik": "0001045810",
+  "name": "NVIDIA CORP"
+ },
+ "GOOGL": {
+  "cik": "0001652044",
+  "name": "Alphabet Inc."
+ },
+ "AMZN": {
+  "cik": "0001018724",
+  "name": "AMAZON COM INC"
+ },
+ "META": {
+  "cik": "0001326801",
+  "name": "Meta Platforms, Inc."
+ },
+ "AVGO": {
+  "cik": "0001730168",
+  "name": "Broadcom Inc."
+ },
+ "JPM": {
+  "cik": "0000019617",
+  "name": "JPMORGAN CHASE & CO"
+ },
+ "V": {
+  "cik": "0001403161",
+  "name": "VISA INC."
+ },
+ "WMT": {
+  "cik": "0000104169",
+  "name": "Walmart Inc."
+ },
+ "JNJ": {
+  "cik": "0000200406",
+  "name": "JOHNSON & JOHNSON"
+ },
+ "XOM": {
+  "cik": "0000034088",
+  "name": "EXXON MOBIL CORP"
+ },
+ "MA": {
+  "cik": "0001141391",
+  "name": "Mastercard Inc"
+ },
+ "PG": {
+  "cik": "0000080424",
+  "name": "PROCTER & GAMBLE Co"
+ },
+ "ORCL": {
+  "cik": "0001341439",
+  "name": "ORACLE CORP"
+ },
+ "COST": {
+  "cik": "0000909832",
+  "name": "COSTCO WHOLESALE CORP /NEW"
+ },
+ "NFLX": {
+  "cik": "0001065280",
+  "name": "NETFLIX INC"
+ },
+ "AMD": {
+  "cik": "0000002488",
+  "name": "ADVANCED MICRO DEVICES INC"
+ },
+ "CRM": {
+  "cik": "0001108524",
+  "name": "Salesforce, Inc."
+ },
+ "DIS": {
+  "cik": "0001744489",
+  "name": "Walt Disney Co"
+ },
+ "INTC": {
+  "cik": "0000050863",
+  "name": "INTEL CORP"
+ },
+ "BAC": {
+  "cik": "0000070858",
+  "name": "BANK OF AMERICA CORP /DE/"
+ },
+ "PFE": {
+  "cik": "0000078003",
+  "name": "PFIZER INC"
+ },
+ "T": {
+  "cik": "0000732717",
+  "name": "AT&T INC."
+ },
+ "CSCO": {
+  "cik": "0000858877",
+  "name": "CISCO SYSTEMS, INC."
+ },
+ "ADBE": {
+  "cik": "0000796343",
+  "name": "ADOBE INC."
+ },
+ "QCOM": {
+  "cik": "0000804328",
+  "name": "QUALCOMM INC/DE"
+ },
+ "TXN": {
+  "cik": "0000097476",
+  "name": "TEXAS INSTRUMENTS INC"
+ },
+ "HON": {
+  "cik": "0000773840",
+  "name": "HONEYWELL INTERNATIONAL INC"
+ },
+ "NEE": {
+  "cik": "0000753308",
+  "name": "NEXTERA ENERGY INC"
+ },
+ "UNH": {
+  "cik": "0000731766",
+  "name": "UNITEDHEALTH GROUP INC"
+ },
+ "DHR": {
+  "cik": "0000313616",
+  "name": "DANAHER CORP /DE/"
+ },
+ "AMAT": {
+  "cik": "0000006951",
+  "name": "APPLIED MATERIALS INC /DE"
+ },
+ "MU": {
+  "cik": "0000723125",
+  "name": "MICRON TECHNOLOGY INC"
+ },
+ "PYPL": {
+  "cik": "0001633917",
+  "name": "PayPal Holdings, Inc."
+ },
+ "SHOP": {
+  "cik": "0001594805",
+  "name": "SHOPIFY INC."
+ },
+ "COIN": {
+  "cik": "0001679788",
+  "name": "Coinbase Global, Inc."
+ },
+ "PLTR": {
+  "cik": "0001321655",
+  "name": "Palantir Technologies Inc."
+ },
+ "UBER": {
+  "cik": "0001543151",
+  "name": "Uber Technologies, Inc"
+ },
+ "ABNB": {
+  "cik": "0001559720",
+  "name": "Airbnb, Inc."
+ },
+ "SNOW": {
+  "cik": "0001640147",
+  "name": "Snowflake Inc."
+ },
+ "ZS": {
+  "cik": "0001713683",
+  "name": "Zscaler, Inc."
+ },
+ "MRK": {
+  "cik": "0000310158",
+  "name": "Merck & Co., Inc."
+ },
+ "LLY": {
+  "cik": "0000059478",
+  "name": "ELI LILLY & Co"
+ },
+ "ABBV": {
+  "cik": "0001551152",
+  "name": "AbbVie Inc."
+ },
+ "TMO": {
+  "cik": "0000097745",
+  "name": "THERMO FISHER SCIENTIFIC INC."
+ },
+ "PEP": {
+  "cik": "0000077476",
+  "name": "PEPSICO INC"
+ },
+ "WFC": {
+  "cik": "0000072971",
+  "name": "WELLS FARGO & COMPANY/MN"
+ },
+ "GS": {
+  "cik": "0000886982",
+  "name": "GOLDMAN SACHS GROUP INC"
+ },
+ "MS": {
+  "cik": "0000895421",
+  "name": "MORGAN STANLEY"
+ },
+ "C": {
+  "cik": "0000831001",
+  "name": "CITIGROUP INC"
+ },
+ "AXP": {
+  "cik": "0000004962",
+  "name": "AMERICAN EXPRESS CO"
+ },
+ "BLK": {
+  "cik": "0001364742",
+  "name": "BlackRock Finance, Inc."
+ },
+ "SPGI": {
+  "cik": "0000064040",
+  "name": "S&P Global Inc."
+ },
+ "ADP": {
+  "cik": "0000008670",
+  "name": "AUTOMATIC DATA PROCESSING INC"
+ },
+ "GILD": {
+  "cik": "0000882095",
+  "name": "GILEAD SCIENCES, INC."
+ },
+ "AMGN": {
+  "cik": "0000318154",
+  "name": "AMGEN INC"
+ },
+ "ISRG": {
+  "cik": "0001035267",
+  "name": "INTUITIVE SURGICAL INC"
+ },
+ "VRTX": {
+  "cik": "0000875320",
+  "name": "VERTEX PHARMACEUTICALS INC / MA"
+ },
+ "REGN": {
+  "cik": "0000872589",
+  "name": "REGENERON PHARMACEUTICALS, INC."
+ },
+ "KLAC": {
+  "cik": "0000319201",
+  "name": "KLA CORP"
+ },
+ "LRCX": {
+  "cik": "0000707549",
+  "name": "LAM RESEARCH CORP"
+ },
+ "FTNT": {
+  "cik": "0001262039",
+  "name": "Fortinet, Inc."
+ },
+ "TEAM": {
+  "cik": "0001650372",
+  "name": "Atlassian Corp"
+ },
+ "DOCU": {
+  "cik": "0001261333",
+  "name": "DOCUSIGN, INC."
+ },
+ "SQ": {
+  "cik": "0001512673",
+  "name": "Block, Inc."
+ },
+ "SBUX": {
+  "cik": "0000829224",
+  "name": "STARBUCKS CORP"
+ },
+ "NKE": {
+  "cik": "0000320187",
+  "name": "NIKE, Inc."
+ },
+ "MCD": {
+  "cik": "0000063908",
+  "name": "MCDONALDS CORP"
+ },
+ "LOW": {
+  "cik": "0000060667",
+  "name": "LOWES COMPANIES INC"
+ },
+ "TGT": {
+  "cik": "0000027419",
+  "name": "TARGET CORP"
+ },
+ "CVX": {
+  "cik": "0000093410",
+  "name": "CHEVRON CORP"
+ },
+ "COP": {
+  "cik": "0001163165",
+  "name": "CONOCOPHILLIPS"
+ },
+ "DUK": {
+  "cik": "0001326160",
+  "name": "Duke Energy CORP"
+ },
+ "SO": {
+  "cik": "0000092122",
+  "name": "SOUTHERN CO"
+ },
+ "PLD": {
+  "cik": "0001045609",
+  "name": "Prologis, Inc."
+ },
+ "SPG": {
+  "cik": "0001063761",
+  "name": "SIMON PROPERTY GROUP INC."
+ }
+}

@@ -134,6 +134,39 @@ oversize), labeled as screening only — not a security audit. Verified live
   full 10000, 1% fee (100) settled separately. Note: no web-search —
   that needs a paid SERP key and is intentionally out of scope.
 
+### edgar — SEC EDGAR fundamentals API — $0.05/call
+
+- **Endpoint:** `POST https://pikochain.serveousercontent.com/x402/edgar`
+  with JSON body `{"ticker":"AAPL"}` (GET `?ticker=AAPL` also works).
+  Also accepts `{"cik":"320193"}` and optional `filingType`: `"10-K"` | `"10-Q"`
+  (default: latest filing, 10-K or 10-Q).
+- **Price:** 50000 wUSDC base units = $0.05 per call (+1% platform fee on top)
+- **What it does:** queries SEC EDGAR (data.sec.gov — free, no API key) and returns
+  agent-ready JSON:
+  - `company` — name + 10-digit CIK
+  - `filing` — form, filed date, period end, accession number, canonical
+    `documentUrl` on sec.gov Archives
+  - `financials` — latest 10-K annual XBRL facts: `revenue` (auto-picks the
+    reporting concept each filer actually uses), `netIncome`, `totalAssets`,
+    each with value, USD unit, fiscal year end, filed date
+- **Data source notes:** ticker→CIK map is a locally verified bundle (78 tickers,
+  cross-checked against EDGAR) with opportunistic daily refresh; every SEC request
+  carries an identifying User-Agent and is throttled ≤10 req/sec per SEC policy.
+- **Guards:** ticker format validated and the SEC upstream is probed **before**
+  payment — unknown ticker, bad format, or a dead/blocked SEC returns 400 and
+  never charges. Filing data is never fabricated.
+- **Registry:** `0x5717829ef201712b51af0ae1db1abd429669d02ef44f17ff759834af0edb5ccf`
+  (`pikopay-market-edgar-v1`), payTo `0xc59Ff0d9C33f03E5bf126E05aac4FA53F2720d35`
+- **Try it:**
+  ```
+  piko-x402 pay 'https://pikochain.serveousercontent.com/x402/edgar?ticker=AAPL' --yes
+  ```
+- Verified live 2026-09-25: HTTP 200 via public tunnel (AAPL: 10-Q filed
+  2026-07-31, FY2025 revenue $416.161B / net income $112.01B / assets $359.241B),
+  merchant received full 50000, 1% fee (500) settled separately.
+  Settle tx `0xc32911dec374f13f43527847be1edfde082ecab57cfd06999a64ef98412e0183`
+  (block 14105).
+
 ### chain-risk-scan — PikoChain address risk report — $0.05/call (suggested)
 
 Example product shipped with this skill (`examples/chain-risk-scan.js`).
