@@ -123,6 +123,138 @@ function askValidate(u) {
   return null;
 }
 
+// ---------- web-intel: POST /api/extract ----------
+// Input: JSON {"url":"https://..."} (or ?url= for GET). Output: clean markdown
+// + title/description/OG metadata + tech-stack detection + outbound links.
+// No third-party API keys: pure fetch + @mozilla/readability + turndown.
+const { JSDOM } = require('jsdom');
+const { Readability } = require('@mozilla/readability');
+const TurndownService = require('turndown');
+const dns = require('dns').promises;
+const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+
+function isPrivateIP(ip) {
+  const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (m) {
+    const a = +m[1], b = +m[2];
+    return a === 10 || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) || a === 127 || a === 0 || (a === 169 && b === 254);
+  }
+  const l = ip.toLowerCase();
+  return l === '::1' || l.startsWith('fe80:') || l.startsWith('fc') || l.startsWith('fd');
+}
+
+async function checkUrlAllowed(raw) {
+  let u;
+  try { u = new URL(String(raw)); } catch { return 'invalid URL'; }
+  if (!['http:', 'https:'].includes(u.protocol)) return 'only http(s) URLs allowed';
+  let addrs;
+  try { addrs = await dns.lookup(u.hostname, { all: true }); }
+  catch { return 'DNS resolution failed'; }
+  if (addrs.some((a) => isPrivateIP(a.address))) return 'private/internal URLs are blocked';
+  return null;
+}
+
+async function fetchPage(target) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 15000);
+  let r;
+  try {
+    r = await fetch(target, {
+      signal: ctl.signal, redirect: 'follow',
+      headers: { 'User-Agent': 'PikoIntel/1.0 (+https://pikochain.serveousercontent.com)' },
+    });
+  } finally { clearTimeout(t); }
+  if (!r.ok) throw new Error(`fetch failed: HTTP ${r.status}`);
+  const ct = r.headers.get('content-type') || '';
+  if (!/text\/html|application\/xhtml/i.test(ct))
+    throw new Error(`unsupported content-type: ${ct.slice(0, 60)}`);
+  const reader = r.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > 2000000) { try { reader.cancel(); } catch {} throw new Error('page too large (>2MB)'); }
+    chunks.push(value);
+  }
+  const headers = {};
+  r.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+  return { html: Buffer.concat(chunks).toString('utf8'), headers, finalUrl: r.url };
+}
+
+const TECH_FINGERPRINTS = [
+  { name: 'WordPress', test: (h, html) => html.includes('wp-content') || html.includes('wp-includes') || /<meta[^>]+generator[^>]*wordpress/i.test(html) },
+  { name: 'Next.js', test: (h, html) => html.includes('_next/static') || html.includes('__NEXT_DATA__') },
+  { name: 'Nuxt', test: (h, html) => html.includes('_nuxt/') || html.includes('__NUXT__') },
+  { name: 'Gatsby', test: (h, html) => html.includes('chunk-mapping') },
+  { name: 'Drupal', test: (h, html) => /drupal\.js|Drupal\.settings/i.test(html) },
+  { name: 'Joomla', test: (h, html) => /<meta[^>]+generator[^>]*joomla/i.test(html) },
+  { name: 'Shopify', test: (h, html) => html.includes('cdn.shopify.com') },
+  { name: 'Wix', test: (h, html) => html.includes('wixstatic.com') },
+  { name: 'Squarespace', test: (h, html) => html.includes('squarespace') },
+  { name: 'Ghost', test: (h, html) => /<meta[^>]+generator[^>]*ghost/i.test(html) },
+  { name: 'React', test: (h, html) => html.includes('react-dom') || /data-reactroot/i.test(html) },
+  { name: 'Vue', test: (h, html) => html.includes('vue.runtime') || /data-v-[a-f0-9]{8}/i.test(html) },
+  { name: 'Angular', test: (h, html) => html.includes('ng-version') },
+  { name: 'jQuery', test: (h, html) => /jquery(\.min)?\.js/i.test(html) },
+  { name: 'Tailwind', test: (h, html) => /tailwind/i.test(html) },
+  { name: 'Bootstrap', test: (h, html) => /bootstrap(\.min)?\.(css|js)/i.test(html) },
+  { name: 'Cloudflare', test: (h) => !!(h['cf-ray'] || (h.server || '').toLowerCase().includes('cloudflare')) },
+  { name: 'Fastly', test: (h) => !!(h['x-served-by'] && /cache/i.test(h['x-served-by'])) },
+  { name: 'Akamai', test: (h) => !!h['x-akamai-transformed'] },
+  { name: 'CloudFront', test: (h) => (h.via || '').includes('cloudfront') || (h.server || '').includes('cloudfront') },
+];
+
+async function extractHandler(u, postBody) {
+  const target = (postBody && postBody.url) || u.searchParams.get('url');
+  const { html, headers, finalUrl } = await fetchPage(target);
+  const dom = new JSDOM(html, { url: finalUrl });
+  const doc = dom.window.document;
+  const meta = (sel) => doc.querySelector(sel)?.getAttribute('content') || null;
+  const title = doc.querySelector('title')?.textContent?.trim() || null;
+  const description = meta('meta[name="description"]');
+  const og = {};
+  for (const p of ['og:title', 'og:description', 'og:image', 'og:type', 'og:site_name',
+                   'og:url', 'twitter:card', 'twitter:title', 'twitter:description']) {
+    const v = meta(`meta[property="${p}"],meta[name="${p}"]`);
+    if (v) og[p] = v;
+  }
+  let markdown = '';
+  try {
+    const article = new Readability(doc).parse();
+    if (article && article.content) markdown = turndown.turndown(article.content);
+  } catch { /* fall through to fallback */ }
+  if (!markdown.trim()) {
+    markdown = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 8000);
+  }
+  markdown = markdown.slice(0, 20000);
+  const techStack = TECH_FINGERPRINTS
+    .filter((f) => { try { return f.test(headers, html); } catch { return false; } })
+    .map((f) => f.name);
+  if (headers.server) techStack.push('server:' + headers.server.slice(0, 40));
+  if (headers['x-powered-by']) techStack.push('powered-by:' + headers['x-powered-by'].slice(0, 40));
+  const host = new URL(finalUrl).hostname;
+  const outboundLinks = [...new Set(
+    [...doc.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'))
+  )]
+    .map((href) => { try { return new URL(href, finalUrl).href; } catch { return null; } })
+    .filter((h) => h && /^https?:/.test(h) && new URL(h).hostname !== host)
+    .slice(0, 50);
+  dom.window.close();
+  return {
+    service: 'extract', url: target, finalUrl,
+    title, description, og, techStack, outboundLinks, markdown,
+  };
+}
+
+async function extractValidate(u, postBody) {
+  const target = (postBody && postBody.url) || u.searchParams.get('url');
+  if (!target) return 'missing URL: POST JSON {"url":"https://..."} (or ?url=...)';
+  return checkUrlAllowed(target); // null = ok, else the reason
+}
+
 // ---------- x402 plumbing (shared by all services) ----------
 
 const SERVICES = {
@@ -141,6 +273,13 @@ const SERVICES = {
   '/api/ask': {
     price: '10000', description: 'Demo rule-based PikoChain Q&A - $0.01 per call',
     resource: `${PUBLIC}/x402/ask`, handler: askHandler, validate: askValidate,
+  },
+  // web-intel: paid page extraction. POST JSON {"url":"https://..."} (GET ?url= also works).
+  // Returns clean markdown + title/description/OG + tech-stack + outbound links. $0.01/call.
+  '/api/extract': {
+    price: '10000',
+    description: 'Web intelligence: URL -> clean markdown + metadata + tech-stack + outbound links - $0.01 per call',
+    resource: `${PUBLIC}/x402/extract`, handler: extractHandler, validate: extractValidate,
   },
   // x402 v2 showcase: metered translation, scheme "upto".
   // Client authorizes a MAX ($0.10); server settles the ACTUAL metered amount
@@ -238,6 +377,20 @@ function requirementsV2(svc, u) {
 }
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64');
 
+function readBodyRaw(req, max) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > max) { reject(new Error('body too large')); req.destroy(); }
+      else data += c;
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
 async function postJson(url, obj) {
   const r = await fetch(url, {
     method: 'POST',
@@ -253,9 +406,21 @@ const server = http.createServer(async (req, res) => {
   if (!svc) {
     res.writeHead(404); res.end('not found'); return;
   }
+  // read JSON body for POST (bounded); handlers/validators receive it as 2nd arg
+  let postBody = null;
+  if (req.method === 'POST') {
+    try {
+      const raw = await readBodyRaw(req, 65536);
+      postBody = raw ? JSON.parse(raw) : {};
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'malformed JSON body' }));
+      return;
+    }
+  }
   // validate request params BEFORE asking for payment (don't charge for bad input)
   if (svc.validate) {
-    const err = svc.validate(u);
+    const err = await svc.validate(u, postBody);
     if (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err }));
@@ -315,7 +480,7 @@ const server = http.createServer(async (req, res) => {
     }
     let result;
     try {
-      result = await svc.handler(u);
+      result = await svc.handler(u, postBody);
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: e.message || 'handler error' }));
@@ -372,21 +537,27 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ ...requirements(svc), error: `payment invalid: ${vr.invalidReason}` }));
     return;
   }
-  const sr = await postJson(`${FACILITATOR}/settle`, settleBody);
-  if (!sr.success) {
+  // Run settlement and the service handler concurrently: wall time ~= max(settle,
+  // handler) instead of the sum, keeping public-tunnel responses under the edge
+  // timeout. The handler result is only ever returned when settlement succeeded;
+  // on settlement failure it is computed and discarded, never sent back.
+  const [srSettled, hrSettled] = await Promise.allSettled([
+    postJson(`${FACILITATOR}/settle`, settleBody),
+    (async () => svc.handler(u, postBody))(),
+  ]);
+  const sr = srSettled.status === 'fulfilled' ? srSettled.value : null;
+  if (!sr || !sr.success) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: `settlement failed: ${sr.errorReason}` }));
+    res.end(JSON.stringify({ error: `settlement failed: ${sr ? sr.errorReason : 'facilitator unreachable'}` }));
     return;
   }
-
-  let result;
-  try {
-    result = await svc.handler(u);
-  } catch (e) {
+  if (hrSettled.status === 'rejected') {
+    const e = hrSettled.reason;
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: e.message || 'handler error', paid: true, tx: sr.transaction }));
+    res.end(JSON.stringify({ error: (e && e.message) || 'handler error', paid: true, tx: sr.transaction }));
     return;
   }
+  const result = hrSettled.value;
 
   const paymentResponseB64 = b64(sr);
   res.writeHead(200, {

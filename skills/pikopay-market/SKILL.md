@@ -88,7 +88,56 @@ oversize), labeled as screening only — not a security audit. Verified live
 
 ## Live products on this marketplace
 
-(Product cards for services currently for sale — see below.)
+### translate — EN→ZH dictionary translation — $0.02/call
+
+- **Endpoint:** `https://pikochain.serveousercontent.com/x402/translate?text=<text>&to=zh`
+- **Price:** 20000 wUSDC base units = $0.02 per call (+1% platform fee on top)
+- **What it does:** word-by-word English→Chinese dictionary translation.
+  Unknown words pass through unchanged. Demo-grade (not a full MT engine) —
+  good for keyword/label translation, not prose.
+- **Input:** `?text=` (required, max 200 chars). `&to=zh` accepted (only `zh`
+  supported).
+- **Response:** `{service, original, translated, to:'zh', note, paid, tx}`
+- **Registry:** `0x681c18331adb0f185dfb78d15713d5c2498f4c3808b67619f6692d32ba5fa647`
+  (`pikopay-demo-translate`), payTo `0xc59Ff0d9C33f03E5bf126E05aac4FA53F2720d35`
+- **Try it:**
+  ```
+  piko-x402 pay 'https://pikochain.serveousercontent.com/x402/translate?text=hello%20world'
+  ```
+- Verified live 2026-09-25: HTTP 200, merchant received full 20000, 1% fee
+  (200) settled to the fee recipient in a separate tx.
+
+### web-intel — paid page extraction API — $0.01/call
+
+- **Endpoint:** `POST https://pikochain.serveousercontent.com/x402/extract`
+  with JSON body `{"url":"https://..."}` (GET `?url=` also works)
+- **Price:** 10000 wUSDC base units = $0.01 per call (+1% platform fee on top)
+- **What it does:** fetches the URL server-side (no API keys, pure Node:
+  fetch + readability + turndown) and returns:
+  - `markdown` — clean article text, markdown-formatted (20k char cap)
+  - `title`, `description`, `og` — page title, meta description, OpenGraph/Twitter tags
+  - `techStack` — detected CMS/framework/CDN from headers + HTML/script
+    fingerprints (WordPress, Next.js, Shopify, Cloudflare, …)
+  - `outboundLinks` — deduped off-site links (cap 50)
+  - `finalUrl` — after redirects
+- **Guards:** http(s) only, DNS-resolved host must not be private/loopback
+  (SSRF blocked with 400 **before** payment), 15s fetch timeout, 2MB cap,
+  HTML only. Bad input is rejected with 400 and never charged.
+- **Registry:** `0xb82525f07e0154083ac2e8f22533ee00d0a7b2ec9f4d67471e210ce9e1eb3030`
+  (`pikopay-market-web-intel-v1`), payTo `0xc59Ff0d9C33f03E5bf126E05aac4FA53F2720d35`
+- **Try it** (Node):
+  ```
+  POST https://pikochain.serveousercontent.com/x402/extract
+  {"url":"https://example.com"}   -> 402 quote -> pay -> 200 + result
+  ```
+- Verified live 2026-09-25: HTTP 200 via public tunnel, merchant received
+  full 10000, 1% fee (100) settled separately. Note: no web-search —
+  that needs a paid SERP key and is intentionally out of scope.
+
+### chain-risk-scan — PikoChain address risk report — $0.05/call (suggested)
+
+Example product shipped with this skill (`examples/chain-risk-scan.js`).
+See "Example product" above. Sellers deploy and price it themselves.
 
 ## Honest boundaries
 
