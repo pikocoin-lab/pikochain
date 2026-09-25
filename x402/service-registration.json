@@ -1,14 +1,18 @@
 {
   "pikopay-demo-translate": {
     "id": "0x681c18331adb0f185dfb78d15713d5c2498f4c3808b67619f6692d32ba5fa647",
-    "tx": "0x7ab3aecc95c4c6be14561da2f2f0fb079f345824842d0c646a385e93157b0210"
+    "skipped": true
   },
   "pikopay-demo-chaindata": {
     "id": "0x9b5cf39584de3963343bf47b0fd4737864f16ae03d105608e4cb90dcb5b00271",
-    "tx": "0x4dd522c1eb15ede3ee9a0cfd6cc2492b394779cf9f9bfd7b9ffab5affbd625dd"
+    "skipped": true
   },
   "pikopay-demo-ask": {
     "id": "0x1731bdf3950fce9e40b2646643ecd64ce78dc27b462d82783437aa2ebfb1286b",
-    "tx": "0xd46ccf1e7393d8000f41f983d93b5c109cc5a067c84f4e17cc99328be7f2d52c"
+    "skipped": true
+  },
+  "pikopay-demo-upto-translate": {
+    "id": "0x64fd22719a26558fbedd79f8dcc114749fef0732176e358be2f3856338e3d799",
+    "tx": "0xb9f34307ee65710e1d6ac3b8b30ffdaea4a92b5ad6d2cf378d18e4640552fe2f"
   }
 }

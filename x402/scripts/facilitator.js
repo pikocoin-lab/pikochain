@@ -68,6 +68,33 @@ const TYPES = {
   ],
 };
 
+const UPTO_DOMAIN = {
+  name: 'PikoChain x402 Upto',
+  version: '1',
+  chainId: 2049,
+  verifyingContract: wallet.address, // binds the auth to THIS facilitator
+};
+const UPTO_TYPES = {
+  UptoAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'payTo', type: 'address' },
+    { name: 'maxAmount', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+};
+// Single-use enforcement for upto authorizations (Permit2-style nonce tracking).
+const UPTO_NONCE_DB = path.join(__dirname, '../upto-nonces.json');
+const uptoUsedNonces = new Set();
+try {
+  for (const n of JSON.parse(fs.readFileSync(UPTO_NONCE_DB, 'utf8')))
+    uptoUsedNonces.add(String(n).toLowerCase());
+} catch {}
+function uptoSaveNonces() {
+  try { fs.writeFileSync(UPTO_NONCE_DB, JSON.stringify([...uptoUsedNonces])); } catch {}
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -116,6 +143,116 @@ async function verifyPayload(pp, expect) {
   return { ok: true, payer: a.from };
 }
 
+// ---- x402 v2: normalize v1 and v2 payload shapes ----
+// v1: { x402Version: 1, scheme, network, payload }  (or bare { scheme, network, payload })
+// v2: { x402Version: 2, accepted: { scheme, network, ... }, payload }  (inside paymentPayload)
+// Returns { version: 1|2, scheme, network, payload, accepted, paymentRequirements }
+function normalizeIncoming(body) {
+  const pp = body.paymentPayload || body;
+  if (pp && (pp.x402Version === 2 || pp.accepted)) {
+    const accepted = pp.accepted || {};
+    return {
+      version: 2,
+      scheme: accepted.scheme || 'exact',
+      network: accepted.network || NETWORK,
+      payload: pp.payload || {},
+      accepted,
+      paymentRequirements: body.paymentRequirements || null,
+    };
+  }
+  return {
+    version: 1,
+    scheme: pp.scheme || 'exact',
+    network: pp.network || NETWORK,
+    payload: pp.payload || {},
+    accepted: null,
+    paymentRequirements: null,
+  };
+}
+
+// ---- scheme: upto (usage-based, PikoChain asset transfer method) ----
+// Official x402 v2 upto/EVM requires Permit2, which is not deployed on eip155:2049.
+// PikoChain implements identical upto SEMANTICS via a different transfer method,
+// advertised as assetTransferMethod "piko-allowance":
+//   1. client approves the facilitator for >= maxAmount (+maxFee) on the token
+//   2. client signs EIP-712 UptoAuthorization (recipient-bound, time-bound, single-use nonce)
+//   3. facilitator settles the ACTUAL metered amount via transferFrom (<= maxAmount)
+// Trust assumption (documented): like exact settlement, the facilitator is trusted
+// to honor the signed payTo and the metered amount.
+async function verifyUpto(n, pr) {
+  const { signature, uptoAuthorization: u } = n.payload || {};
+  if (!signature || !u) return { ok: false, reason: 'missing signature/uptoAuthorization' };
+  if (n.network !== NETWORK) return { ok: false, reason: `unsupported network ${n.network}` };
+  const accepted = n.accepted || {};
+  const payTo = (pr && pr.payTo) || accepted.payTo;
+  if (!payTo) return { ok: false, reason: 'missing payTo in requirements' };
+  if ((u.payTo || '').toLowerCase() !== String(payTo).toLowerCase())
+    return { ok: false, reason: 'upto payTo mismatch' };
+  let recovered;
+  try {
+    recovered = ethers.verifyTypedData(UPTO_DOMAIN, UPTO_TYPES, {
+      from: u.from, payTo: u.payTo, maxAmount: u.maxAmount,
+      validAfter: u.validAfter, validBefore: u.validBefore, nonce: u.nonce,
+    }, signature);
+  } catch (e) {
+    return { ok: false, reason: 'bad signature encoding' };
+  }
+  if (recovered.toLowerCase() !== String(u.from).toLowerCase())
+    return { ok: false, reason: 'signature does not match payer' };
+  const now = Math.floor(Date.now() / 1000);
+  if (now < Number(u.validAfter)) return { ok: false, reason: 'upto authorization not yet valid' };
+  if (now > Number(u.validBefore)) return { ok: false, reason: 'upto authorization expired' };
+  const nonceKey = String(u.nonce).toLowerCase();
+  if (uptoUsedNonces.has(nonceKey)) return { ok: false, reason: 'upto authorization already used' };
+  const maxAmount = BigInt(u.maxAmount);
+  if (maxAmount <= 0n) return { ok: false, reason: 'upto maxAmount must be > 0' };
+  // Phase-dependent amount: at settle time paymentRequirements.amount = ACTUAL metered
+  // amount (must be <= signed max). Signature is always re-verified against the max.
+  let actual = maxAmount;
+  if (pr && pr.amount !== undefined && pr.amount !== null && String(pr.amount) !== '') {
+    actual = BigInt(pr.amount);
+    if (actual < 0n || actual > maxAmount)
+      return { ok: false, reason: 'settle amount exceeds authorized maximum' };
+  }
+  const maxFee = expectedFee(maxAmount.toString());
+  const need = maxAmount + maxFee;
+  const allowance = await token.allowance(u.from, wallet.address);
+  if (allowance < need) return { ok: false, reason: 'insufficient facilitator allowance for upto max' };
+  const bal = await token.balanceOf(u.from);
+  if (bal < need) return { ok: false, reason: 'insufficient wUSDC balance for upto max' };
+  return { ok: true, payer: u.from, payTo: u.payTo, maxAmount, actual, nonce: u.nonce, auth: u };
+}
+
+async function settleUpto(n) {
+  const v = await verifyUpto(n, n.paymentRequirements);
+  if (!v.ok) return { ok: false, status: 400, reason: v.reason };
+  uptoUsedNonces.add(String(v.nonce).toLowerCase());
+  uptoSaveNonces();
+  let txHash = '';
+  if (v.actual > 0n) {
+    try {
+      const tx = await token.transferFrom(v.payer, v.payTo, v.actual);
+      const receipt = await tx.wait();
+      if (receipt.status !== 1) throw new Error('upto tx reverted');
+      txHash = tx.hash;
+    } catch (e) {
+      return { ok: false, status: 500, reason: String(e.message || e).slice(0, 200) };
+    }
+  }
+  // fee leg on the ACTUAL settled amount; a fee failure never fails the payment
+  const fee = expectedFee(v.actual.toString());
+  let feeTx = null, feeError = null;
+  if (fee > 0n) {
+    try {
+      const ftx = await token.transferFrom(v.payer, FEE_RECIPIENT, fee);
+      const freceipt = await ftx.wait();
+      if (freceipt.status !== 1) throw new Error('upto fee tx reverted');
+      feeTx = ftx.hash;
+    } catch (e) { feeError = String(e.message || e).slice(0, 200); }
+  }
+  return { ok: true, txHash, payer: v.payer, actual: v.actual.toString(), fee: fee.toString(), feeTx, feeError };
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/bounty') {
     let body;
@@ -135,11 +272,61 @@ const server = http.createServer(async (req, res) => {
       return send(res, 500, { success: false, errorReason: String(e.message || e).slice(0, 200) });
     }
   }
+  // ---- x402 v2 discovery: GET /supported ----
+  if (req.method === 'GET' && req.url === '/supported') {
+    return send(res, 200, {
+      kinds: [
+        { x402Version: 2, scheme: 'exact', network: NETWORK, extra: { assetTransferMethod: 'eip3009' } },
+        { x402Version: 2, scheme: 'upto', network: NETWORK, extra: { assetTransferMethod: 'piko-allowance', facilitatorAddress: wallet.address } },
+      ],
+      extensions: [],
+      signers: { 'eip155:*': [wallet.address] },
+    });
+  }
   if (req.method !== 'POST' || !['/verify', '/settle', '/settleBatch'].includes(req.url)) {
-    return send(res, 404, { error: 'use POST /verify, /settle, /settleBatch or /bounty' });
+    return send(res, 404, { error: 'use GET /supported, POST /verify, /settle, /settleBatch or /bounty' });
   }
   let body;
   try { body = await readBody(req); } catch { return send(res, 400, { error: 'bad json' }); }
+
+  const n = normalizeIncoming(body);
+  if (n.scheme !== 'exact' && n.scheme !== 'upto') {
+    const err = `unsupported scheme ${n.scheme}`;
+    if (req.url === '/verify') return send(res, 200, { isValid: false, invalidReason: err, payer: null });
+    return send(res, 400, { success: false, errorReason: err });
+  }
+
+  if (req.url === '/verify') {
+    let out;
+    if (n.scheme === 'upto') {
+      const v = await verifyUpto(n, n.paymentRequirements);
+      out = v.ok
+        ? { isValid: true, invalidReason: null, payer: v.payer }
+        : { isValid: false, invalidReason: v.reason, payer: null };
+    } else {
+      const v = await verifyPayload(n);
+      out = v.ok
+        ? { isValid: true, invalidReason: null, payer: v.payer }
+        : { isValid: false, invalidReason: v.reason, payer: null };
+    }
+    out.feeBps = FEE_BPS; // advertised so clients can sign the fee leg when > 0
+    out.feeRecipient = FEE_RECIPIENT;
+    return send(res, 200, out);
+  }
+
+  // /settle — upto has phase-dependent amount semantics
+  if (n.scheme === 'upto') {
+    const r = await settleUpto(n);
+    if (!r.ok) return send(res, r.status, { success: false, errorReason: r.reason });
+    const out = {
+      success: true, transaction: r.txHash, network: NETWORK, payer: r.payer,
+      amount: r.actual, // upto SettlementResponse extension: actual settled amount
+    };
+    if (r.feeTx || r.feeError) { out.fee = r.fee; out.feeTransaction = r.feeTx; out.feeError = r.feeError; }
+    return send(res, 200, out);
+  }
+
+  // exact /settle path below works on the normalized shape `n`
 
   // ---- batch: verify N payments, settle all in ONE tx ----
   if (req.url === '/settleBatch') {
@@ -194,21 +381,10 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  const pp = body.paymentPayload || body;
-
-  const v = await verifyPayload(pp);
-  if (req.url === '/verify') {
-    const out = v.ok
-      ? { isValid: true, invalidReason: null, payer: v.payer }
-      : { isValid: false, invalidReason: v.reason, payer: null };
-    out.feeBps = FEE_BPS; // advertised so clients can sign the fee leg when > 0
-    out.feeRecipient = FEE_RECIPIENT;
-    return send(res, 200, out);
-  }
-
-  // /settle
+  const v = await verifyPayload(n);
+  // /settle (exact) — /verify was already handled above via normalizeIncoming dispatch
   if (!v.ok) return send(res, 400, { success: false, errorReason: v.reason });
-  const { signature, authorization: a } = pp.payload;
+  const { signature, authorization: a } = n.payload;
   const sig = ethers.Signature.from(signature);
   const fee = expectedFee(a.value);
   let feeAuth = null, feeSig = null;

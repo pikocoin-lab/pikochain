@@ -28,6 +28,12 @@ const SERVICES = [
     price: 10000n, // $0.01 wUSDC
     meta: 'PikoPay demo: rule-based PikoChain Q&A, $0.01 per call, x402 on PikoChain',
   },
+  {
+    seed: 'pikopay-demo-upto-translate',
+    endpoint: `${PUBLIC}/x402/upto-translate`,
+    price: 100000n, // $0.10 wUSDC = authorized MAX (x402 v2 upto); actual charge = $0.001/word
+    meta: 'PikoPay demo: metered EN->ZH translation, x402 v2 upto: $0.001/word up to $0.10 max',
+  },
 ];
 
 async function main() {
