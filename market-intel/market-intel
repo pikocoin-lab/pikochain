@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""
+market-intel: daily x402 AI-agent service market intelligence.
+
+Scrapes public x402 paid-service listings, stores structured snapshots in
+SQLite, and exposes a small CLI. The scraper is idempotent: re-running it
+upserts services, appends price_history rows only on price change, and
+refreshes daily_stats.
+
+Usage:
+  market-intel scrape            # run one full scrape (daily cron calls this)
+  market-intel list              # active services
+  market-intel new --days 7      # services first seen in last N days
+  market-intel price <name>      # price history for a service
+  market-intel stats             # daily aggregate stats
+
+Env:
+  MARKET_INTEL_DB   SQLite path (default ~/workspace/data/market-intel/market.db)
+
+Public listings only. No logins, no personal data. Respects robots.txt,
+throttles requests, identifies with a User-Agent. A blocked source is logged
+and skipped -- rows are never fabricated.
+"""
+
+import argparse
+import json
+import os
+import re
+import sqlite3
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+
+UA = "PikoChain-market-intel/1.0 (+https://pikochain.serveousercontent.com)"
+DATA_DIR = os.path.dirname(
+    os.environ.get("MARKET_INTEL_DB",
+                   os.path.expanduser("~/workspace/data/market-intel/market.db")))
+DB_PATH = os.environ.get("MARKET_INTEL_DB",
+                         os.path.expanduser("~/workspace/data/market-intel/market.db"))
+LOG_PATH = os.path.join(DATA_DIR, "scrape.log")
+THROTTLE_S = 1.5
+TIMEOUT_S = 25
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS services(
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  endpoint TEXT NOT NULL DEFAULT '',
+  network TEXT DEFAULT '',
+  price_units INTEGER,
+  price_usd REAL,
+  asset TEXT DEFAULT '',
+  category TEXT DEFAULT '',
+  source_url TEXT DEFAULT '',
+  first_seen TEXT NOT NULL,
+  last_seen TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(name, endpoint)
+);
+CREATE TABLE IF NOT EXISTS price_history(
+  id INTEGER PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES services(id),
+  observed_at TEXT NOT NULL,
+  price_units INTEGER,
+  price_usd REAL
+);
+CREATE TABLE IF NOT EXISTS daily_stats(
+  observed_at TEXT PRIMARY KEY,
+  total_services INTEGER,
+  avg_price_usd REAL,
+  new_services INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_ph_service ON price_history(service_id);
+CREATE INDEX IF NOT EXISTS idx_svc_active ON services(active);
+"""
+
+# ---------------------------------------------------------------- fetching
+
+_robots_cache = {}
+_last_fetch = 0.0
+
+
+def log(msg):
+    line = f"{datetime.now(timezone.utc).isoformat()} {msg}"
+    print(line, flush=True)
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(LOG_PATH, "a") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
+
+
+def robots_allowed(url):
+    """Minimal robots.txt check: returns False only on explicit Disallow match."""
+    try:
+        from urllib.parse import urlparse
+        parts = urlparse(url)
+        host = f"{parts.scheme}://{parts.netloc}"
+        if host not in _robots_cache:
+            disallows = []
+            try:
+                req = urllib.request.Request(
+                    host + "/robots.txt",
+                    headers={"User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    if r.status == 200:
+                        in_ua = True
+                        for raw in r.read().decode("utf-8", "replace").splitlines():
+                            line = raw.strip()
+                            if line.lower().startswith("user-agent:"):
+                                ua = line.split(":", 1)[1].strip()
+                                in_ua = ua in ("*", "PikoChain-market-intel",
+                                               "PikoChain-market-intel/1.0")
+                            elif in_ua and line.lower().startswith("disallow:"):
+                                path = line.split(":", 1)[1].strip()
+                                if path:
+                                    disallows.append(path)
+            except Exception:
+                pass
+            _robots_cache[host] = disallows
+        for d in _robots_cache[host]:
+            if parts.path.startswith(d):
+                return False
+        return True
+    except Exception:
+        return True
+
+
+def fetch(url):
+    """GET url with throttle + UA + robots check. Returns text or None."""
+    global _last_fetch
+    if not robots_allowed(url):
+        log(f"SKIP robots-disallowed: {url}")
+        return None
+    wait = THROTTLE_S - (time.time() - _last_fetch)
+    if wait > 0:
+        time.sleep(wait)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA,
+                                                   "Accept": "*/*"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+            body = r.read()
+        _last_fetch = time.time()
+        return body.decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        log(f"HTTP {e.code} (blocked or gone, continuing): {url}")
+    except Exception as e:
+        log(f"fetch error ({type(e).__name__}, continuing): {url}")
+    _last_fetch = time.time()
+    return None
+
+
+# ---------------------------------------------------------------- categories
+
+CATEGORY_RULES = [
+    ("search", ["search", "serp", "keyword", "brand mention", "exa", "tavily"]),
+    ("email", ["email", "mx record", "deliverability", "disposable"]),
+    ("web-intel", ["tech-stack", "website analysis", "meta extract"]),
+    ("enrichment", ["enrich", "firmographic", "company data", "people", "lead"]),
+    ("extraction", ["extract", "scrap", "crawl", "markdown", "pdf", "ocr",
+                    "invoice", "document pars", "firecrawl"]),
+    ("compliance", ["sanction", "pep", "adverse media", "kyc", "kyb", "vasp",
+                    "compliance", "aml"]),
+    ("crypto", ["crypto", "wallet", "token", "blockchain", "web3", "defi",
+                "gas price", "rugcheck", "whale"]),
+    ("media", ["image generat", "text-to-speech", "speech-to-text", "stt",
+               "tts", "voice", "video", "audio", "dall-e"]),
+    ("dev-tools", ["json", "schema", "sql", "nginx", "openapi", "webhook",
+                   "code ", "regex", "zod", "csv"]),
+    ("geo", ["ip ", "geoloc", "address valid", "phone normal"]),
+    ("finance", ["exchange rate", "vat", "iban", "fx "]),
+    ("security", ["ssl", "dns", "port check", "security", "vulnerab"]),
+    ("translation", ["translat"]),
+]
+
+
+def categorize(name, description):
+    text = f"{name} {description}".lower()
+    for cat, keys in CATEGORY_RULES:
+        if any(k in text for k in keys):
+            return cat
+    return "other"
+
+
+def usd_to_units(usd):
+    if usd is None:
+        return None
+    return int(round(usd * 1_000_000))
+
+
+def parse_price_usd(text):
+    """Extract first $X[.YY] from text; 'free' -> 0.0; None if absent."""
+    if not text:
+        return None
+    if re.search(r"\bfree\b", text, re.I):
+        return 0.0
+    m = re.search(r"\$\s*([\d,]+(?:\.\d+)?)", text)
+    if m:
+        try:
+            return float(m.group(1).replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+# ---------------------------------------------------------------- sources
+
+def src_strale_listing():
+    """Parse the revenue-ranked table from strale's x402-listing.md."""
+    url = ("https://raw.githubusercontent.com/strale-io/strale/HEAD/"
+           "docs/x402-listing.md")
+    md = fetch(url)
+    if not md:
+        return []
+    out = []
+    for line in md.splitlines():
+        m = re.match(r"\|\s*`([^`]+)`\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|",
+                     line.strip())
+        if not m:
+            continue
+        slug, desc, price_txt = m.group(1), m.group(2).strip(), m.group(3).strip()
+        if slug == "capability":
+            continue
+        usd = parse_price_usd(price_txt)
+        out.append({
+            "name": f"strale:{slug}",
+            "endpoint": f"https://api.strale.io/x402/{slug}",
+            "network": "eip155:8453",
+            "price_units": usd_to_units(usd),
+            "price_usd": usd,
+            "asset": "USDC",
+            "category": categorize(slug, desc),
+            "source_url": "https://github.com/strale-io/strale/blob/HEAD/docs/x402-listing.md",
+        })
+    log(f"strale_listing: {len(out)} rows")
+    return out
+
+
+def src_strale_catalog():
+    """Full machine-readable catalog: 290 capabilities with USD prices."""
+    url = "https://api.strale.io/x402/catalog"
+    body = fetch(url)
+    if not body:
+        return []
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        log("strale_catalog: invalid JSON, skipping")
+        return []
+    caps = data.get("capabilities", [])
+    out = []
+    for c in caps:
+        slug = c.get("slug", "")
+        name = c.get("name", slug) or slug
+        endpoint = c.get("endpoint", "") or f"https://api.strale.io/x402/{slug}"
+        usd = c.get("price_usd")
+        try:
+            usd = float(usd) if usd is not None else None
+        except (TypeError, ValueError):
+            usd = None
+        out.append({
+            "name": f"strale:{slug}",
+            "endpoint": endpoint,
+            "network": "eip155:8453",
+            "price_units": usd_to_units(usd),
+            "price_usd": usd,
+            "asset": "USDC",
+            "category": categorize(name, c.get("description", "")),
+            "source_url": "https://api.strale.io/x402/catalog",
+        })
+    log(f"strale_catalog: {len(out)} rows")
+    return out
+
+
+def parse_awesome_bullets(md, page_url):
+    """Parse '- [Name](url) - description ... $X ...' entries."""
+    out = []
+    in_tools = False
+    for line in md.splitlines():
+        s = line.strip()
+        if re.match(r"^#{1,4}\s+tools", s, re.I):
+            in_tools = True
+            continue
+        if in_tools and re.match(r"^#{1,4}\s+", s):
+            break
+        if not in_tools:
+            continue
+        m = re.match(r"^[-*]\s*\[([^\]]+)\]\(([^)]+)\)\s*[-–—]?\s*(.*)$", s)
+        if not m:
+            continue
+        name, url, desc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        if not url.startswith("http"):
+            continue
+        usd = parse_price_usd(desc)
+        out.append({
+            "name": name,
+            "endpoint": url,
+            "network": "",
+            "price_units": usd_to_units(usd),
+            "price_usd": usd,
+            "asset": "USDC" if usd else "",
+            "category": categorize(name, desc),
+            "source_url": page_url,
+        })
+    return out
+
+
+def src_awesome_x402():
+    """Curated awesome-x402 lists (public web, no key)."""
+    repos = [
+        "https://github.com/dvd90/awesome-x402",
+        "https://github.com/blacklabelartcult/awesome-x402",
+    ]
+    out = []
+    for repo in repos:
+        for branch in ("main", "master"):
+            raw = (repo.replace("https://github.com/", "https://raw.githubusercontent.com/")
+                   + f"/{branch}/README.md")
+            md = fetch(raw)
+            if md:
+                rows = parse_awesome_bullets(md, repo)
+                log(f"awesome {repo}: {len(rows)} rows")
+                out.extend(rows)
+                break
+    return out
+
+def src_floe_directory():
+    """Floe x402 API directory README: category tables of vendor services."""
+    repo = "https://github.com/floe-labs/floe-labs-docs"
+    page = repo + "/blob/HEAD/docs/x402-directory/README.md"
+    raw = ("https://raw.githubusercontent.com/floe-labs/floe-labs-docs/HEAD/"
+           "docs/x402-directory/README.md")
+    md = fetch(raw)
+    if not md:
+        return []
+    out = []
+    for line in md.splitlines():
+        s = line.strip()
+        m = re.match(r"^\|\s*\[([^\]]+)\]\([^)]+\)\s*\|\s*(.+?)\s*\|$", s)
+        if not m or m.group(1).lower() == "category":
+            continue
+        category, cell = m.group(1).strip(), m.group(2).strip()
+        for part in cell.split("·"):
+            part = part.strip()
+            nm = re.match(r"^([^—–-]+?)\s*[—–-]\s*(.+)$", part)
+            if nm:
+                name, desc = nm.group(1).strip(), nm.group(2).strip()
+            else:
+                name, desc = part, ""
+            if not name or len(name) > 80:
+                continue
+            out.append({
+                "name": name,
+                "endpoint": "",
+                "network": "",
+                "price_units": None,
+                "price_usd": None,
+                "asset": "",
+                "category": category.lower(),
+                "source_url": page,
+            })
+    log(f"floe_directory: {len(out)} rows")
+    return out
+
+
+SOURCES = [
+    ("strale_listing", src_strale_listing),
+    ("strale_catalog", src_strale_catalog),
+    ("awesome_x402", src_awesome_x402),
+    ("floe_directory", src_floe_directory),
+]
+
+# ---------------------------------------------------------------- pipeline
+
+def get_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    con = sqlite3.connect(DB_PATH)
+    con.executescript(SCHEMA)
+    return con
+
+
+def run_scrape():
+    con = get_db()
+    run_start = datetime.now(timezone.utc).isoformat()
+    today = run_start[:10]
+    seen = set()
+    for src_name, fn in SOURCES:
+        try:
+            rows = fn()
+        except Exception as e:
+            log(f"source {src_name} crashed ({type(e).__name__}), continuing")
+            continue
+        for r in rows:
+            key = (r["name"], r["endpoint"])
+            if key in seen:
+                continue
+            seen.add(key)
+            cur = con.execute(
+                "SELECT id, price_units, price_usd FROM services "
+                "WHERE name=? AND endpoint=?", key)
+            row = cur.fetchone()
+            if row is None:
+                cur = con.execute(
+                    """INSERT INTO services
+                       (name, endpoint, network, price_units, price_usd, asset,
+                        category, source_url, first_seen, last_seen, active)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,1)""",
+                    (r["name"], r["endpoint"], r["network"], r["price_units"],
+                     r["price_usd"], r["asset"], r["category"], r["source_url"],
+                     run_start, run_start))
+                sid = cur.lastrowid
+                con.execute(
+                    "INSERT INTO price_history (service_id, observed_at, "
+                    "price_units, price_usd) VALUES (?,?,?,?)",
+                    (sid, run_start, r["price_units"], r["price_usd"]))
+            else:
+                sid, old_units, old_usd = row
+                con.execute(
+                    """UPDATE services SET network=?, price_units=?, price_usd=?,
+                       asset=?, category=?, source_url=?, last_seen=?, active=1
+                       WHERE id=?""",
+                    (r["network"], r["price_units"], r["price_usd"], r["asset"],
+                     r["category"], r["source_url"], run_start, sid))
+                if (old_units, old_usd) != (r["price_units"], r["price_usd"]):
+                    con.execute(
+                        "INSERT INTO price_history (service_id, observed_at, "
+                        "price_units, price_usd) VALUES (?,?,?,?)",
+                        (sid, run_start, r["price_units"], r["price_usd"]))
+    con.execute("UPDATE services SET active=0 WHERE last_seen < ?", (run_start,))
+    con.execute(
+        """INSERT INTO daily_stats (observed_at, total_services, avg_price_usd,
+           new_services) VALUES (?,?,?,?)
+           ON CONFLICT(observed_at) DO UPDATE SET
+             total_services=excluded.total_services,
+             avg_price_usd=excluded.avg_price_usd,
+             new_services=excluded.new_services""",
+        (today,
+         con.execute("SELECT COUNT(*) FROM services WHERE active=1").fetchone()[0],
+         con.execute("SELECT AVG(price_usd) FROM services "
+                     "WHERE active=1 AND price_usd > 0").fetchone()[0],
+         con.execute("SELECT COUNT(*) FROM services "
+                     "WHERE substr(first_seen,1,10)=?", (today,)).fetchone()[0]))
+    con.commit()
+    total = con.execute("SELECT COUNT(*) FROM services WHERE active=1").fetchone()[0]
+    log(f"scrape done: {len(seen)} rows seen, {total} active services")
+    con.close()
+
+# ---------------------------------------------------------------- CLI
+
+def fmt_usd(v):
+    return "n/a" if v is None else (f"${v:.4f}" if v < 0.01 else f"${v:.2f}")
+
+
+def cmd_list(_args):
+    con = get_db()
+    rows = con.execute(
+        "SELECT name, price_usd, category, substr(source_url,1,40) FROM services "
+        "WHERE active=1 ORDER BY price_usd DESC NULLS LAST, name").fetchall()
+    con.close()
+    print(f"{'name':44} {'price':>9} {'category':14} source")
+    print("-" * 100)
+    for n, p, c, s in rows:
+        print(f"{n[:43]:44} {fmt_usd(p):>9} {(c or '')[:13]:14} {s}")
+    print(f"\n{len(rows)} active services")
+
+
+def cmd_new(args):
+    con = get_db()
+    rows = con.execute(
+        "SELECT name, price_usd, category, substr(first_seen,1,10) FROM services "
+        "WHERE substr(first_seen,1,10) >= date('now', ?) "
+        "ORDER BY first_seen DESC", (f"-{args.days} days",)).fetchall()
+    con.close()
+    print(f"services first seen in last {args.days} days: {len(rows)}")
+    for n, p, c, fs in rows:
+        print(f"  {fs}  {n[:50]:52} {fmt_usd(p):>9}  {c}")
+
+
+def cmd_price(args):
+    con = get_db()
+    svc = con.execute(
+        "SELECT id, name, price_usd FROM services WHERE name LIKE ? "
+        "ORDER BY active DESC LIMIT 5", (f"%{args.name}%",)).fetchall()
+    if not svc:
+        print(f"no service matching '{args.name}'")
+        con.close()
+        return
+    for sid, name, cur_p in svc:
+        print(f"\n{name}  (current {fmt_usd(cur_p)})")
+        hist = con.execute(
+            "SELECT substr(observed_at,1,10), price_usd FROM price_history "
+            "WHERE service_id=? ORDER BY observed_at", (sid,)).fetchall()
+        for d, p in hist:
+            print(f"  {d}  {fmt_usd(p)}")
+    con.close()
+
+
+def cmd_stats(_args):
+    con = get_db()
+    rows = con.execute(
+        "SELECT observed_at, total_services, avg_price_usd, new_services "
+        "FROM daily_stats ORDER BY observed_at DESC LIMIT 30").fetchall()
+    con.close()
+    print(f"{'date':12} {'services':>8} {'avg_price':>10} {'new':>5}")
+    for d, t, a, n in rows:
+        print(f"{d:12} {t:>8} {fmt_usd(a):>10} {n:>5}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="market-intel",
+                                 description="x402 agent-service market intelligence")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("scrape", help="run one full scrape (idempotent)")
+    sub.add_parser("list", help="list active services")
+    p_new = sub.add_parser("new", help="services first seen recently")
+    p_new.add_argument("--days", type=int, default=7)
+    p_price = sub.add_parser("price", help="price history for a service")
+    p_price.add_argument("name")
+    sub.add_parser("stats", help="daily aggregate stats")
+    args = ap.parse_args()
+    if args.cmd == "scrape":
+        run_scrape()
+    elif args.cmd == "list":
+        cmd_list(args)
+    elif args.cmd == "new":
+        cmd_new(args)
+    elif args.cmd == "price":
+        cmd_price(args)
+    elif args.cmd == "stats":
+        cmd_stats(args)
+
+
+if __name__ == "__main__":
+    main()
