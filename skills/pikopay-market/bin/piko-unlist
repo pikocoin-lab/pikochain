@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+// piko-unlist: take your service off PikoPayRegistry (owner only). Reversible.
+//   piko-unlist --id my-service-v1            # unlist
+//   piko-unlist --id my-service-v1 --on       # re-list
+// Key ONLY from env PIKO_SELLER_KEY.
+const path = require('path');
+const lib = require(path.join(__dirname, 'piko-lib.js'));
+
+async function main() {
+  const id = lib.serviceId(lib.needArg('id'));
+  const on = process.argv.includes('--on');
+  const provider = await lib.rpcProvider();
+  const wallet = lib.sellerWallet(provider);
+  const registry = await lib.registryContract(wallet);
+  const tx = await registry.setActive(id, on);
+  const receipt = await tx.wait();
+  if (receipt.status !== 1) throw new Error('setActive reverted (are you the owner?)');
+  console.log(`service ${on ? 're-listed' : 'unlisted'}: id=${id} tx=${tx.hash}`);
+}
+main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });

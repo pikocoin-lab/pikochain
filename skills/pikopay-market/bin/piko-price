@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+// piko-price: change your service's price on PikoPayRegistry (owner only).
+//   piko-price --id my-service-v1 --price 100000
+// --price in wUSDC base units (6 decimals). Key ONLY from env PIKO_SELLER_KEY.
+const path = require('path');
+const lib = require(path.join(__dirname, 'piko-lib.js'));
+
+async function main() {
+  const id = lib.serviceId(lib.needArg('id'));
+  const price = lib.needArg('price');
+  if (!/^\d+$/.test(price)) { console.error('--price must be an integer (wUSDC base units)'); process.exit(1); }
+  const provider = await lib.rpcProvider();
+  const wallet = lib.sellerWallet(provider);
+  const registry = await lib.registryContract(wallet);
+  const tx = await registry.setPrice(id, price);
+  const receipt = await tx.wait();
+  if (receipt.status !== 1) throw new Error('setPrice reverted (are you the owner?)');
+  console.log(`price updated: id=${id} pricePerCall=${price} tx=${tx.hash}`);
+}
+main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });

@@ -1,0 +1,164 @@
+#!/usr/bin/env node
+// piko-seller: turn ANY async function into an x402-paid endpoint on PikoChain.
+// Payment IS the access: no accounts, no API keys. The buyer's signed wUSDC
+// authorization settles on-chain BEFORE your handler ever runs — a payment
+// failure means your code never executes and the result is never returned.
+//
+// Usage:
+//   piko-seller --port 8095 --name risk-scan --price 50000 \
+//     --pay-to 0xYOUR_ADDRESS --handler ./chain-risk-scan.js
+//
+// The handler module exports:
+//   module.exports = {
+//     description: 'one-line description',
+//     validate(url) -> string|null,   // optional: reject bad input BEFORE payment (400)
+//     handler(url, ctx) -> object,    // your paid logic; ctx = { ethers, provider, fetch }
+//   }
+//
+// Flags:
+//   --port         listen port (default 8095)
+//   --name         service name shown in the 402 (default from handler or 'service')
+//   --price        price per call in wUSDC base units, 6 decimals (e.g. 50000 = $0.05)
+//   --pay-to       address that receives payment (or env PIKO_SELLER_PAYTO)
+//   --handler      path to the handler module (required)
+//   --facilitator  x402 facilitator URL (default http://127.0.0.1:8090)
+//   --rpc          PikoChain RPC (default http://127.0.0.1:8545)
+const http = require('http');
+const path = require('path');
+const { ethers } = require('ethers');
+
+function arg(name, def = null) {
+  const i = process.argv.indexOf('--' + name);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
+}
+
+const PORT = parseInt(arg('port', '8095'), 10);
+const PRICE = arg('price'); // required
+const PAY_TO = arg('pay-to') || process.env.PIKO_SELLER_PAYTO;
+const HANDLER_PATH = arg('handler');
+const FACILITATOR = arg('facilitator', 'http://127.0.0.1:8090');
+const RPC = arg('rpc', process.env.PIKO_RPC || 'http://127.0.0.1:8545');
+const TOKEN = arg('token', '0x83de4653D2851Ff2175e71683054B876ABA55533'); // wUSDC v2
+const NETWORK = 'eip155:2049';
+
+if (!PRICE || !/^\d+$/.test(PRICE)) { console.error('missing/invalid --price (wUSDC base units, 6 decimals)'); process.exit(1); }
+if (!PAY_TO || !ethers.isAddress(PAY_TO)) { console.error('missing/invalid --pay-to (or PIKO_SELLER_PAYTO)'); process.exit(1); }
+if (!HANDLER_PATH) { console.error('missing --handler <path-to-handler.js>'); process.exit(1); }
+
+const mod = require(path.resolve(HANDLER_PATH));
+const NAME = arg('name', mod.name || 'service');
+const DESCRIPTION = mod.description || `${NAME} on PikoChain`;
+const provider = new ethers.JsonRpcProvider(RPC);
+const ctx = { ethers, provider, fetch };
+
+// ---- platform fee discovery: advertised in the 402; enforced at settle ----
+let FEE = { bps: 0, recipient: '' };
+async function refreshFee() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 3000);
+    const r = await fetch(`${FACILITATOR}/supported`, { signal: ctl.signal });
+    clearTimeout(t);
+    const s = await r.json();
+    FEE = { bps: Number(s?.fee?.bps || 0), recipient: String(s?.fee?.recipient || '') };
+  } catch { FEE = { bps: 0, recipient: '' }; }
+  return FEE;
+}
+
+function requirements(u) {
+  const fee = FEE.bps > 0 ? { feeBps: FEE.bps, feeRecipient: FEE.recipient } : {};
+  return {
+    x402Version: 1,
+    error: `Payment required: ${DESCRIPTION} — $${(Number(PRICE) / 1e6).toFixed(2)} wUSDC per call`,
+    accepts: [{
+      scheme: 'exact',
+      network: NETWORK,
+      maxAmountRequired: PRICE,
+      resource: `http://localhost:${PORT}${u.pathname}`,
+      description: DESCRIPTION,
+      mimeType: 'application/json',
+      payTo: PAY_TO,
+      maxTimeoutSeconds: 300,
+      asset: TOKEN,
+      extra: { name: 'Wrapped USD Coin', version: '1' },
+      ...fee,
+    }],
+  };
+}
+
+async function postJson(url, obj) {
+  const r = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(obj),
+  });
+  return r.json();
+}
+
+const server = http.createServer(async (req, res) => {
+  const u = new URL(req.url, 'http://localhost');
+  const deny = (code, obj) => {
+    res.writeHead(code, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(obj));
+  };
+  // validate input BEFORE asking for payment — never charge for bad input
+  if (mod.validate) {
+    const err = mod.validate(u);
+    if (err) return deny(400, { error: err });
+  }
+  const paymentB64 = req.headers['x-payment'];
+  if (!paymentB64) {
+    await refreshFee();
+    return deny(402, requirements(u));
+  }
+  let paymentPayload;
+  try {
+    paymentPayload = JSON.parse(Buffer.from(paymentB64, 'base64').toString('utf8'));
+  } catch { return deny(400, { error: 'malformed X-PAYMENT header' }); }
+
+  // amount + payee must match exactly
+  const auth = paymentPayload?.payload?.authorization || {};
+  if (BigInt(auth.value || '0') < BigInt(PRICE) ||
+      (auth.to || '').toLowerCase() !== PAY_TO.toLowerCase()) {
+    await refreshFee();
+    return deny(402, { ...requirements(u), error: 'payment amount/payee mismatch' });
+  }
+  // fee leg: required when the facilitator advertises feeBps > 0
+  const feePayload = paymentPayload.feePayload || null;
+  if (FEE.bps > 0 && !feePayload) {
+    return deny(402, { ...requirements(u), error: 'platform fee authorization required (see feeBps/feeRecipient)' });
+  }
+  const body = { paymentPayload };
+  if (feePayload) body.feePayload = feePayload;
+
+  const vr = await postJson(`${FACILITATOR}/verify`, body).catch((e) => ({ isValid: false, invalidReason: String(e.message || e) }));
+  if (!vr.isValid) {
+    await refreshFee();
+    return deny(402, { ...requirements(u), error: `payment invalid: ${vr.invalidReason}` });
+  }
+  const sr = await postJson(`${FACILITATOR}/settle`, body).catch((e) => ({ success: false, errorReason: String(e.message || e) }));
+  if (!sr.success) {
+    return deny(500, { error: `settlement failed: ${sr.errorReason}` });
+  }
+
+  // paid in full — ONLY now run the handler
+  let result;
+  try {
+    result = await mod.handler(u, ctx);
+  } catch (e) {
+    return deny(500, { error: e.message || 'handler error', paid: true, tx: sr.transaction });
+  }
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'PAYMENT-RESPONSE': Buffer.from(JSON.stringify(sr)).toString('base64'),
+  });
+  res.end(JSON.stringify({
+    ...result,
+    paid: '$' + (Number(PRICE) / 1e6).toFixed(2) + ' wUSDC',
+    tx: sr.transaction,
+  }));
+});
+
+refreshFee().then(() => {
+  server.listen(PORT, () => console.log(
+    `piko-seller "${NAME}" on :${PORT} — $${(Number(PRICE) / 1e6).toFixed(2)}/call -> ${PAY_TO} (feeBps=${FEE.bps})`));
+});

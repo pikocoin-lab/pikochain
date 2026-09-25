@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+// piko-register: list a paid service on PikoPayRegistry (open registration).
+// The registry is a permissionless on-chain directory: any address can register.
+//   piko-register --id my-service-v1 --endpoint https://myhost/x402/svc \
+//     --price 50000 --meta "One-line description for buyers" [--pay-to 0x...]
+//
+// --price is in wUSDC base units (6 decimals): 50000 = $0.05 per call.
+// --id: a seed string (hashed to bytes32) or a literal 0x bytes32 id.
+// --pay-to defaults to your own address.
+// Key ONLY from env PIKO_SELLER_KEY. Never printed, never saved, never hardcoded.
+const path = require('path');
+const lib = require(path.join(__dirname, 'piko-lib.js'));
+
+async function main() {
+  const seed = lib.needArg('id');
+  const endpoint = lib.needArg('endpoint');
+  const price = lib.needArg('price');
+  const meta = lib.needArg('meta');
+  if (!/^\d+$/.test(price)) { console.error('--price must be an integer (wUSDC base units)'); process.exit(1); }
+  const provider = await lib.rpcProvider();
+  const wallet = lib.sellerWallet(provider);
+  const payTo = lib.arg('pay-to', await wallet.getAddress());
+  if (!lib.ethers.isAddress(payTo)) { console.error('bad --pay-to'); process.exit(1); }
+
+  const id = lib.serviceId(seed);
+  const registry = await lib.registryContract(wallet);
+  const existing = await registry.get(id);
+  if (existing.owner !== lib.ethers.ZeroAddress) {
+    console.log(`already registered: id=${id} owner=${existing.owner} active=${existing.active}`);
+    console.log('use piko-price / piko-unlist to manage it (only the owner can)');
+    return;
+  }
+  const tx = await registry.register(id, endpoint, price, payTo, meta);
+  const receipt = await tx.wait();
+  if (receipt.status !== 1) throw new Error('register reverted');
+  console.log(JSON.stringify({
+    id, seed: /^0x/.test(seed) ? undefined : seed,
+    endpoint, pricePerCall: price, payTo, tx: tx.hash,
+  }, null, 2));
+}
+main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });

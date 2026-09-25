@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+// piko-earnings: show the wUSDC balance of your pay-to address (read-only).
+//   piko-earnings --pay-to 0xYOUR_ADDRESS
+// This is what buyers have paid you (minus any platform fee, which is
+// collected in a separate transaction to the fee recipient — your price
+// is never reduced).
+const path = require('path');
+const lib = require(path.join(__dirname, 'piko-lib.js'));
+
+async function main() {
+  const payTo = lib.needArg('pay-to');
+  if (!lib.ethers.isAddress(payTo)) { console.error('bad --pay-to'); process.exit(1); }
+  const provider = await lib.rpcProvider();
+  const token = new lib.ethers.Contract(lib.WUSDC, lib.WUSDC_ABI, provider);
+  const bal = await token.balanceOf(payTo);
+  console.log(JSON.stringify({
+    payTo,
+    wusdcBalance: bal.toString(),
+    wusdcDollars: '$' + (Number(bal) / 1e6).toFixed(6) + ' (test wUSDC, no real value)',
+  }, null, 2));
+}
+main().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });
