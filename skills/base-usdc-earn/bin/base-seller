@@ -1,0 +1,178 @@
+#!/usr/bin/env node
+/*
+ * base-seller — sell a paid API on Base mainnet, earn real USDC per call (x402).
+ *
+ *   BASE_PAY_TO=0x...      your Base receiving address (REQUIRED; falls back to
+ *                          the documented default below — change it to your own)
+ *   BASE_PRICE=10000       price per call in USDC atomic units (6 decimals; default $0.01)
+ *   BASE_FACILITATOR_URL   default https://facilitator.xpay.sh
+ *   BASE_NETWORK           default "base" (use "base-sepolia" for testnet-first runs)
+ *   PORT                   default 8092
+ *
+ * Needs the `ethers` package: run `npm i ethers` in this skill dir, or set
+ * NODE_PATH to a dir that has it.
+ *
+ * Flow per request: no/invalid X-PAYMENT -> HTTP 402 with paymentRequirements.
+ * Valid payment -> facilitator /verify -> run handler -> facilitator /settle ->
+ * return result. The result is NEVER returned when payment fails.
+ */
+'use strict';
+let ethers;
+try { ethers = require('ethers'); }
+catch (e) {
+  console.error('missing dependency: ethers. Run `npm i ethers` in the skill dir first.');
+  process.exit(1);
+}
+const http = require('http');
+
+// Verified on-chain (Base mainnet, chainId 8453): name()="USD Coin", version()="2", decimals()=6
+const USDC_MAINNET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const USDC_SEPOLIA  = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+const TOKEN_NAME = 'USD Coin';
+const TOKEN_VERSION = '2';
+
+// Default receiving address (documented; override with BASE_PAY_TO).
+// This is a PUBLIC receiving address, not a key.
+const DEFAULT_PAY_TO = '0x3BD7d1505Ea03D1483044287f2246FF68231B277';
+
+const CFG = {
+  payTo: process.env.BASE_PAY_TO || DEFAULT_PAY_TO,
+  price: process.env.BASE_PRICE || '10000',
+  facilitator: (process.env.BASE_FACILITATOR_URL || 'https://facilitator.xpay.sh').replace(/\/+$/, ''),
+  network: process.env.BASE_NETWORK || 'base',
+  port: parseInt(process.env.PORT || '8092', 10),
+};
+if (!ethers.isAddress(CFG.payTo)) {
+  console.error('BASE_PAY_TO is not a valid address:', CFG.payTo);
+  process.exit(1);
+}
+const ASSET = CFG.network === 'base-sepolia' ? USDC_SEPOLIA : USDC_MAINNET;
+
+const trunc = (a) => (typeof a === 'string' && a.length > 12 ? a.slice(0, 6) + '…' + a.slice(-4) : a);
+
+/* ---------------- example product: /text-stats ---------------- */
+function detectLanguage(text) {
+  // heuristic only — script detection, not real language ID
+  if (/[\u3040-\u30ff]/.test(text)) return 'ja';
+  if (/[\uac00-\ud7af]/.test(text)) return 'ko';
+  if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
+  if (/[\u0400-\u04ff]/.test(text)) return 'ru';
+  if (/[\u0600-\u06ff]/.test(text)) return 'ar';
+  if (/[a-zA-Z]/.test(text)) return 'en';
+  return 'unknown';
+}
+function textStats(input) {
+  const text = typeof input === 'string' ? input : String((input && input.text) || '');
+  const chars = [...text].length;
+  const charsNoSpaces = [...text].filter((c) => !/\s/.test(c)).length;
+  const words = (text.trim().match(/\S+/g) || []).length;
+  return {
+    words,
+    characters: chars,
+    charactersNoSpaces: charsNoSpaces,
+    readingTimeMinutes: Math.round((words / 200) * 100) / 100,
+    detectedLanguage: detectLanguage(text),
+    languageNote: 'detectedLanguage is a script heuristic, not certified language ID',
+  };
+}
+/* ---------------- end example product ---------------- */
+
+const PRODUCTS = {
+  '/text-stats': {
+    description: 'Text statistics: word/character counts, reading time, script-based language hint. $0.01 per call.',
+    price: CFG.price,
+    handler: async (body) => textStats(body),
+  },
+};
+
+function payRequirements(route, product) {
+  return {
+    scheme: 'exact',
+    network: CFG.network,
+    maxAmountRequired: product.price,
+    resource: `http://localhost:${CFG.port}${route}`,
+    description: product.description,
+    mimeType: 'application/json',
+    payTo: CFG.payTo,
+    maxTimeoutSeconds: 300,
+    asset: ASSET,
+    // xpay.sh requires the EIP-712 domain here (verified live: without it -> missing_eip712_domain)
+    extra: { name: TOKEN_NAME, version: TOKEN_VERSION },
+  };
+}
+function send402(res, route, product) {
+  const body = {
+    x402Version: 1,
+    error: `Payment required: ${product.description}`,
+    accepts: [payRequirements(route, product)],
+  };
+  res.writeHead(402, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+function parseXPayment(req) {
+  const h = req.headers['x-payment'];
+  if (!h) return null;
+  try {
+    const raw = h.startsWith('{') ? h : Buffer.from(h, 'base64').toString('utf8');
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+async function facilitator(path, body) {
+  const r = await fetch(CFG.facilitator + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+function readBody(req) {
+  return new Promise((resolve) => {
+    let d = '';
+    req.on('data', (c) => { d += c; if (d.length > 1e6) req.destroy(); });
+    req.on('end', () => {
+      try { resolve(JSON.parse(d || '{}')); } catch { resolve({}); }
+    });
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+  const route = url.pathname;
+  const product = PRODUCTS[route];
+  if (!product) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not found', products: Object.keys(PRODUCTS) }));
+    return;
+  }
+  if (req.method === 'GET' && url.searchParams.get('quote') === '1') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ accepts: [payRequirements(route, product)] }));
+    return;
+  }
+  const paymentPayload = parseXPayment(req);
+  const paymentRequirements = payRequirements(route, product);
+  if (!paymentPayload) { send402(res, route, product); return; }
+  try {
+    const v = await facilitator('/verify', { paymentPayload, paymentRequirements });
+    if (!v || v.isValid !== true) { send402(res, route, product); return; }
+    const input = await readBody(req);
+    const result = await product.handler(input);
+    const s = await facilitator('/settle', { paymentPayload, paymentRequirements });
+    const tx = s && (s.transaction || s.txHash);
+    if (!tx) { send402(res, route, product); return; }
+    const payer = (paymentPayload.payload && paymentPayload.payload.authorization && paymentPayload.payload.authorization.from) || '?';
+    console.log(`[paid] ${new Date().toISOString()} ${route} payer=${trunc(payer)} amount=${product.price} tx=${tx}`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ result, settlement: { transaction: tx, network: CFG.network, payer } }));
+  } catch (e) {
+    // never leak the result on any failure path
+    send402(res, route, product);
+  }
+});
+
+if (require.main === module) {
+  server.listen(CFG.port, () =>
+    console.log(`base-seller on :${CFG.port} | network=${CFG.network} | payTo=${trunc(CFG.payTo)} | price=${CFG.price} | facilitator=${CFG.facilitator}`)
+  );
+}
+module.exports = { textStats, detectLanguage, payRequirements, CFG, PRODUCTS };

@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+/*
+ * base-buyer-test — pay for one x402 call on Base as a buyer (test client).
+ *
+ *   BASE_TEST_KEY=0x...   YOUR OWN private key (REQUIRED). The USER runs this
+ *                          themselves — never paste anyone else's key, never share it.
+ *   SERVICE_URL            full paid endpoint, e.g. http://127.0.0.1:8092/text-stats
+ *   SERVICE_BODY           JSON body to POST (default: {"text":"hello world"})
+ *
+ * Workflow: run against base-sepolia FIRST with testnet USDC. Only point at a
+ * mainnet URL when you accept spending real USDC.
+ */
+'use strict';
+let ethers;
+try { ethers = require('ethers'); }
+catch (e) {
+  console.error('missing dependency: ethers. Run `npm i ethers` in the skill dir first.');
+  process.exit(1);
+}
+
+const KEY = process.env.BASE_TEST_KEY || '';
+const SERVICE_URL = process.env.SERVICE_URL || '';
+const BODY = process.env.SERVICE_BODY || '{"text":"hello world, 你好世界"}';
+if (!KEY || !SERVICE_URL) {
+  console.error('Usage: BASE_TEST_KEY=0x... SERVICE_URL=http://host:port/text-stats ./bin/base-buyer-test');
+  console.error('Test on base-sepolia first. Mainnet spends REAL USDC.');
+  process.exit(1);
+}
+
+const TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+};
+
+async function main() {
+  const wallet = new ethers.Wallet(KEY);
+  console.log('buyer:', wallet.address.slice(0, 6) + '…' + wallet.address.slice(-4));
+
+  // 1. hit the endpoint without payment -> expect 402
+  let r = await fetch(SERVICE_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: BODY,
+  });
+  if (r.status !== 402) throw new Error(`expected 402, got ${r.status}`);
+  const { accepts } = await r.json();
+  const req0 = accepts[0];
+  console.log('quote:', req0.scheme, req0.network, 'price', req0.maxAmountRequired, 'asset', req0.asset);
+
+  // 2. build + sign EIP-3009 authorization (exact scheme)
+  const domain = {
+    name: (req0.extra && req0.extra.name) || 'USD Coin',
+    version: (req0.extra && req0.extra.version) || '2',
+    chainId: parseInt(req0.network === 'base-sepolia' ? '84532' : '8453', 10),
+    verifyingContract: req0.asset,
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const authorization = {
+    from: wallet.address,
+    to: req0.payTo,
+    value: req0.maxAmountRequired,
+    validAfter: '0',
+    validBefore: String(now + 600),
+    nonce: ethers.hexlify(ethers.randomBytes(32)),
+  };
+  const signature = await wallet.signTypedData(domain, TYPES, authorization);
+  const paymentPayload = {
+    x402Version: 1, scheme: 'exact', network: req0.network,
+    payload: { signature, authorization },
+  };
+  const xPayment = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+
+  // 3. retry with payment
+  r = await fetch(SERVICE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-PAYMENT': xPayment },
+    body: BODY,
+  });
+  const out = await r.json();
+  console.log('status:', r.status);
+  console.log(JSON.stringify(out, null, 2).slice(0, 2000));
+  if (r.status === 200 && out.settlement) {
+    console.log('PAID OK — tx:', out.settlement.transaction);
+  }
+}
+main().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });
