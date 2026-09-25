@@ -38,7 +38,8 @@ mkdir -p "$INSTALL_DIR"
 curl -sSL -o "$INSTALL_DIR/genesis.json" "$REPO/genesis.json"
 curl -sSL -o "$INSTALL_DIR/bootnodes.txt" "$REPO/bootnodes.txt"
 curl -sSL -o "$INSTALL_DIR/node.sh" "$REPO/scripts/node.sh"
-chmod +x "$INSTALL_DIR/node.sh"
+curl -sSL -o "$INSTALL_DIR/ai-peer.sh" "$REPO/scripts/ai-peer.sh"
+chmod +x "$INSTALL_DIR/node.sh" "$INSTALL_DIR/ai-peer.sh"
 
 # --- 3. init + start ---
 if [ ! -d "$INSTALL_DIR/data/geth" ]; then
@@ -52,4 +53,7 @@ echo ""
 echo "🎉 This machine is now part of PikoChain."
 echo "   RPC:  http://127.0.0.1:8545"
 echo "   Manage: ~/pikochain/node.sh {start|stop|logs|status}"
+echo ""
+echo "🤖 No public IP? Stay peered via the public TCP bridge:"
+echo "   (crontab -l; echo '*/5 * * * * bash $INSTALL_DIR/ai-peer.sh >>/tmp/piko-peer.log 2>&1') | crontab -"
 echo "   Spread it: run this installer on your next VM ♻️"
