@@ -1,11 +1,11 @@
 #!/bin/bash
 # PikoChain one-liner installer — spreads the chain to any cloud VM in ~60s.
 #
-#   curl -sSL https://raw.githubusercontent.com/pikochain/pikochain/main/scripts/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/pikocoin-lab/pikochain/main/scripts/install.sh | bash
 #
 set -e
 
-REPO="https://raw.githubusercontent.com/pikochain/pikochain/main"
+REPO="https://raw.githubusercontent.com/pikocoin-lab/pikochain/main"
 INSTALL_DIR="$HOME/pikochain"
 GETH_VER="1.13.9"
 GETH_COMMIT="dd938d10"

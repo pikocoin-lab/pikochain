@@ -2,7 +2,7 @@
 
 **An EVM-compatible chain built for the agent era — 2-second blocks, free test tokens, zero-friction onboarding.**
 
-[![Docker Build](https://github.com/pikochain/pikochain/actions/workflows/docker.yml/badge.svg)](https://github.com/pikochain/pikochain/actions/workflows/docker.yml)
+[![Docker Build](https://github.com/pikocoin-lab/pikochain/actions/workflows/docker.yml/badge.svg)](https://github.com/pikocoin-lab/pikochain/actions/workflows/docker.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Chain ID](https://img.shields.io/badge/chainId-2049-blue)
 
@@ -12,7 +12,7 @@ PikoChain is a live Ethereum-compatible blockchain (Clique PoA, 2s block time) w
 
 **Option A — one-liner (any Linux VM):**
 ```bash
-curl -sSL https://raw.githubusercontent.com/pikochain/pikochain/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/pikocoin-lab/pikochain/main/scripts/install.sh | bash
 ```
 
 **Option B — Docker (recommended):**
@@ -24,7 +24,7 @@ docker run -d --name pikochain --restart unless-stopped \
 
 **Option C — Docker Compose:**
 ```bash
-git clone https://github.com/pikochain/pikochain.git && cd pikochain
+git clone https://github.com/pikocoin-lab/pikochain.git && cd pikochain
 docker compose -f docker/docker-compose.yml up -d
 ```
 
