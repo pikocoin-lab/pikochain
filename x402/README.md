@@ -38,6 +38,32 @@ Services: facilitator `:8090` (`/verify`, `/settle`, `/settleBatch`), demo resou
 - Stream: 3 vouchers signed off-chain in 1–3ms each; receiver claimed latest only
   (+0.03 wUSDC, 1 tx); sender refunded 0.97 remainder after expiry (`demo_stream.js`).
 
+## Facilitator fee (revenue mechanism)
+
+The facilitator can take a per-settlement cut, configured by env vars:
+
+```bash
+X402_FEE_BPS=10            # basis points: 10 = 0.1%, 100 = 1%. Default 0 (no fee).
+X402_FEE_RECIPIENT=0x...   # who receives the fee. Default: facilitator's own wallet.
+```
+
+- `X402_FEE_BPS=0` (default): behavior is exactly as before — no fee, no extra fields.
+- When > 0: `/verify` advertises `feeBps`/`feeRecipient`. The payer must attach a
+  **second** EIP-3009 authorization alongside the main payment:
+  ```json
+  { "paymentPayload": { "...main..." }, "feePayload": { "signature": "0x...", "authorization": {
+      "from": "<payer>", "to": "<feeRecipient>", "value": "<payment * bps / 10000>",
+      "validAfter": "...", "validBefore": "...", "nonce": "0x..." } } }
+  ```
+  (batch: each item carries its own `feePayload`). A second signature is required
+  because EIP-3009 locks the exact `(to, value)` — the facilitator cannot split
+  one signed authorization.
+- The fee is **on top of** the merchant price (merchant still receives the full
+  quoted amount). Fee settles after the main payment; a fee-leg failure never
+  fails the payment itself (`feeError` is reported in the response).
+- `/settleBatch`: each item may carry its own `feePayload`; fees settle in one
+  batch tx via `PikoPaySettler`.
+
 ## Run
 
 ```bash
