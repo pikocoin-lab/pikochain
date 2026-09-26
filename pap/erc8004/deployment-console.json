@@ -1,0 +1,24 @@
+{
+  "deployer": "0xc4c319e7f366224f2ff2bbb8b8fc0c2de5b99084",
+  "chainId": 2049,
+  "identityProxy": "0xc9009184993508b6d239dd7adff940380dcf2f49",
+  "identityImpl": "0x4a224d3af977f470c440403d3b6aea565dee004c",
+  "reputationProxy": "0x248635d99fba686fe7a9e8661b3a3fba2ba91e39",
+  "reputationImpl": "0x79e59a111b3315ace8a0ef230419c502e1bfe184",
+  "minimalUUPS": "0x53046a9b5150ca67f496beee97c3d6923f413745",
+  "testAgentId": 0,
+  "selfFeedbackReverts": true,
+  "feedbackHelper": "0xdc7ba5fb932f2f7f4a32cf424bb900c2435eecd0",
+  "feedback": {
+    "value": 85,
+    "decimals": 2,
+    "tag1": "quality",
+    "tag2": "api-test",
+    "revoked": false
+  },
+  "summary": {
+    "count": 1,
+    "value": 85,
+    "decimals": 2
+  }
+}
