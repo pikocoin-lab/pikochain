@@ -26,6 +26,23 @@ Status: v0.1-draft. All four propositions A–D are conjectures with zero empiri
 validation; BlackRock thesis sourced from secondary reporting (original not read);
 all numeric parameters are placeholders.
 
+---
+
+# LCOK — Levelized Cost of Knowledge — Whitepaper
+
+**《LCOK：知识平准化成本 —— AI Agent 知识交易的能量定价基准》**
+*Levelized Cost of Knowledge: An Energy-Denominated Pricing Benchmark for Agent-to-Agent Knowledge Trade*
+
+- `lcok-levelized-cost-of-knowledge-zh.md` — Working Paper v0.1-draft（中文），2026-09-28
+- 核心公式：LCOK = E_total / ∫₀^T f(t)dt —— 知识价格 = 生产耗能（kWh）÷ 有效寿命积分
+- 三要素组合（LCOE 式平准化 ＋ kWh 能量分子 ＋ 知识衰减积分分母 ＋ agent 议价基准）未见实质先行者；最接近者 LCOAI / TEPI / "levelized cost of intelligence" 均已如实引用并辨析
+- 三个可证伪预测 P1–P3 ＋ PikoChain 落地三步（知识市场 listing 能量证明 / 衰减预言机 / x402 按 LCOK 结算）
+
+Status: v0.1-draft. Prior-art check (2026-09-28) found no substantive prior art for the
+combined formulation; negative result, search scope declared in-paper.
+All propositions are conjectures, zero empirical validation; λ/f(t) measurement
+remains the hard problem.
+
 Publication plan: ① whitepaper (this repo + pikochain.serveousercontent.com/whitepaper)
 ② arXiv preprint (timestamp for priority) ③ journal submission
 (*Cryptoeconomic Systems*, MIT Press).
