@@ -55,6 +55,49 @@ const ASSET = CFG.network === 'base-sepolia' ? USDC_SEPOLIA : USDC_MAINNET;
 
 const trunc = (a) => (typeof a === 'string' && a.length > 12 ? a.slice(0, 6) + '…' + a.slice(-4) : a);
 
+/* ---------------- Energy accounting: kWh disclosure (v0.1) ---------------- */
+// "Butter-robot accounting": every quote (402 / ?quote=1) and every paid result
+// carries an energy-cost estimate, so buyers see kWh alongside USDC.
+// This is the protocol field that matters; the coefficients are v0.1
+// placeholders pending real power metering.
+//
+// Method (documented, honest): measure handler elapsed milliseconds, multiply
+// by an assumed power draw for this request's CPU share, add a per-byte
+// network term. This is an ESTIMATE — no power meter is attached to this box.
+// For I/O-bound handlers (extract/edgar) elapsed time includes waiting, so the
+// 15 W assumption overestimates; that bias is disclosed, not hidden.
+const ENERGY = {
+  method: 'elapsed_ms × assumed power draw + network bytes (estimate v0.1, not metered)',
+  wattsAssumed: 15,          // assumed W for this request's share while running
+  whPerByteNetwork: 2e-7,    // ~0.2 µWh per byte transferred (placeholder)
+};
+function estimateEnergyKwh({ elapsedMs = 0, bytesIn = 0, bytesOut = 0 } = {}) {
+  const joulesCompute = (elapsedMs / 1000) * ENERGY.wattsAssumed;
+  const whNetwork = (bytesIn + bytesOut) * ENERGY.whPerByteNetwork;
+  const kwh = joulesCompute / 3.6e6 + whNetwork / 1000;
+  return {
+    kwh_estimate: kwh,
+    kwh_human: kwh < 1e-6 ? `${(kwh * 1e9).toFixed(1)} nWh`
+      : kwh < 1e-3 ? `${(kwh * 1e6).toFixed(2)} µWh`
+      : `${(kwh * 1e3).toFixed(3)} mWh`,
+    method: ENERGY.method,
+    inputs: {
+      elapsed_ms: Math.round(elapsedMs * 100) / 100,
+      bytes_in: bytesIn,
+      bytes_out: bytesOut,
+    },
+    disclaimer: 'estimate only — no power meter attached; v0.1 placeholder coefficients',
+  };
+}
+// Typical per-call estimate shown on quotes (before input is known).
+function typicalEnergy(product) {
+  return estimateEnergyKwh({
+    elapsedMs: product.typicalElapsedMs || 5,
+    bytesIn: 1024,
+    bytesOut: 1024,
+  });
+}
+
 /* ---------------- example product: /text-stats ---------------- */
 function detectLanguage(text) {
   // heuristic only — script detection, not real language ID
@@ -82,11 +125,134 @@ function textStats(input) {
 }
 /* ---------------- end example product ---------------- */
 
+/* ---------------- /translate ($0.02, demo dictionary) ---------------- */
+const DEMO_DICT = {
+  'hello': '你好', 'world': '世界', 'good': '好', 'morning': '早上',
+  'thank': '谢谢', 'you': '你', 'love': '爱', 'peace': '和平',
+};
+function translateDemo(input) {
+  const text = String((input && input.text) || '');
+  const target = String((input && input.target) || 'zh');
+  const words = text.toLowerCase().split(/\s+/).map((w) => DEMO_DICT[w] || w);
+  return {
+    translated: words.join(' '),
+    target,
+    note: 'demo dictionary translation, not production MT',
+  };
+}
+/* ---------------- /extract ($0.01, SSRF-guarded) ---------------- */
+const dns = require('dns').promises;
+function isPrivateIP(ip) {
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|0\.0\.0\.0|::1|fe80:)/i.test(ip);
+}
+async function extractUrl(input) {
+  const urlStr = String((input && input.url) || '');
+  let u;
+  try { u = new URL(urlStr); } catch { throw new Error('invalid url'); }
+  if (!/^https?:$/.test(u.protocol)) throw new Error('only http/https allowed');
+  // SSRF guard: resolve and block private/loopback IPs
+  let addrs;
+  try { addrs = await dns.lookup(u.hostname, { all: true }); }
+  catch { throw new Error('dns resolution failed'); }
+  for (const a of addrs) {
+    if (isPrivateIP(a.address)) throw new Error('private network blocked (SSRF guard)');
+  }
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 12000);
+  try {
+    const r = await fetch(u.toString(), {
+      signal: ctl.signal,
+      headers: { 'User-Agent': 'pikobase-extract/1.0' },
+      redirect: 'manual',
+    });
+    // re-check redirects
+    if ([301, 302, 303, 307, 308].includes(r.status)) {
+      const loc = r.headers.get('location');
+      if (loc) {
+        const ru = new URL(loc, u);
+        const raddrs = await dns.lookup(ru.hostname, { all: true }).catch(() => []);
+        for (const a of raddrs) {
+          if (isPrivateIP(a.address)) throw new Error('redirect to private network blocked');
+        }
+      }
+      throw new Error('redirects not followed for safety');
+    }
+    const ct = r.headers.get('content-type') || '';
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 2e6) throw new Error('response too large (2MB cap)');
+    const html = buf.toString('utf8');
+    const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '';
+    const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 5000);
+    return { url: u.toString(), status: r.status, contentType: ct, title: title.trim(), text };
+  } finally { clearTimeout(t); }
+}
+/* ---------------- /edgar ($0.05, SEC filings) ---------------- */
+let edgarMod = null;
+function getEdgar() {
+  if (!edgarMod) {
+    try { edgarMod = require('/home/hatch/workspace/my-chain/x402/scripts/edgar.js'); }
+    catch (e) { edgarMod = { error: 'edgar module unavailable: ' + e.message }; }
+  }
+  return edgarMod;
+}
+async function edgarHandler(input) {
+  const mod = getEdgar();
+  if (mod.error) throw new Error(mod.error);
+  const ticker = String((input && (input.ticker || input.cik)) || '').toUpperCase();
+  if (!ticker) throw new Error('ticker or cik required');
+  // edgar.js exports a function; adapt to its interface
+  const fn = mod.getEdgarData || mod.default || mod;
+  if (typeof fn !== 'function') throw new Error('edgar module has no callable export');
+  return fn(ticker);
+}
+/* ---------------- /insight ($0.01, text insight) ---------------- */
+function textInsight(input) {
+  const text = String((input && input.text) || '');
+  const stats = textStats(text);
+  const sentences = (text.match(/[^.!?]+[.!?]+/g) || []).length;
+  const paras = (text.split(/\n\s*\n/) || []).filter((p) => p.trim()).length;
+  const uniqueWords = new Set((text.toLowerCase().match(/\S+/g) || [])).size;
+  return {
+    ...stats,
+    sentences,
+    paragraphs: paras,
+    uniqueWords,
+    lexicalDiversity: stats.words ? Math.round((uniqueWords / stats.words) * 100) / 100 : 0,
+  };
+}
+
 const PRODUCTS = {
   '/text-stats': {
     description: 'Text statistics: word/character counts, reading time, script-based language hint. $0.01 per call.',
     price: CFG.price,
+    typicalElapsedMs: 5,
     handler: async (body) => textStats(body),
+  },
+  '/translate': {
+    description: 'Demo dictionary translation (EN->ZH). $0.02 per call.',
+    price: '20000',
+    typicalElapsedMs: 3,
+    handler: async (body) => translateDemo(body),
+  },
+  '/extract': {
+    description: 'Fetch a URL and return title + text (SSRF-guarded, 2MB cap). $0.01 per call.',
+    price: '10000',
+    typicalElapsedMs: 800,
+    handler: async (body) => extractUrl(body),
+  },
+  '/edgar': {
+    description: 'SEC EDGAR company filings + key financials by ticker. $0.05 per call.',
+    price: '50000',
+    typicalElapsedMs: 1500,
+    handler: async (body) => edgarHandler(body),
+  },
+  '/insight': {
+    description: 'Deeper text insight: sentences, paragraphs, lexical diversity. $0.01 per call.',
+    price: '10000',
+    typicalElapsedMs: 8,
+    handler: async (body) => textInsight(body),
   },
 };
 
@@ -111,8 +277,14 @@ function send402(res, route, product) {
     x402Version: 1,
     error: `Payment required: ${product.description}`,
     accepts: [requirements],
+    // Energy disclosure: informational only, NOT part of paymentRequirements
+    // (the settlement path via the facilitator is untouched).
+    energy: typicalEnergy(product),
   };
   res.writeHead(402, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-PAYMENT',
     'Content-Type': 'application/json',
     // x402 spec: machine-readable requirements in the PAYMENT-REQUIRED header
     'PAYMENT-REQUIRED': Buffer.from(JSON.stringify(requirements)).toString('base64'),
@@ -140,7 +312,9 @@ function readBody(req) {
     let d = '';
     req.on('data', (c) => { d += c; if (d.length > 1e6) req.destroy(); });
     req.on('end', () => {
-      try { resolve(JSON.parse(d || '{}')); } catch { resolve({}); }
+      const rawBytes = Buffer.byteLength(d);
+      try { resolve({ body: JSON.parse(d || '{}'), rawBytes }); }
+      catch { resolve({ body: {}, rawBytes }); }
     });
   });
 }
@@ -161,6 +335,8 @@ function discoveryDoc() {
       asset: ASSET,
       payTo: CFG.payTo,
       description: p.description,
+      energy_kwh_typical: typicalEnergy(p).kwh_estimate,
+      energy_note: 'quotes and results also carry a per-call `energy` object (kWh estimate, v0.1)',
     })),
   };
 }
@@ -177,6 +353,17 @@ Buyer signs an EIP-3009 authorization (gasless — the facilitator submits it).
 
 ## Endpoints
 - POST /text-stats — $0.01/call. Input {"text":"..."}. Returns word/character counts, reading time, script-based language hint.
+- POST /translate — $0.02/call. Input {"text":"hello","target":"zh"}. Demo dictionary translation.
+- POST /extract — $0.01/call. Input {"url":"https://..."}. Returns title + text (SSRF-guarded).
+- POST /edgar — $0.05/call. Input {"ticker":"AAPL"}. SEC EDGAR filings + key financials.
+- POST /insight — $0.01/call. Input {"text":"..."}. Sentences, paragraphs, lexical diversity.
+
+## Energy disclosure (kWh)
+Every quote (HTTP 402 body, ?quote=1) and every paid result carries an "energy"
+object: a per-call kWh estimate (method: elapsed_ms x assumed 15 W + network
+bytes; v0.1 estimate, not a meter reading). Buyers see energy cost alongside
+USDC price. Informational only — it is not part of the signed payment
+requirements and never changes settlement.
 
 ## Discovery
 - /.well-known/x402 (machine-readable)
@@ -187,25 +374,41 @@ Buyer signs an EIP-3009 authorization (gasless — the facilitator submits it).
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const route = url.pathname;
+  // CORS: allow browser pages (e.g. the muse.ai self-buy page) to call us.
+  // Payment auth travels in the signed X-PAYMENT payload, not cookies, so
+  // a permissive origin is safe here.
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-PAYMENT',
+    'Access-Control-Expose-Headers': 'X-SUCCESS, X-TRANSACTION',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, cors);
+    res.end();
+    return;
+  }
+  const withCors = (h) => Object.assign({}, cors, h);
   if (route === '/.well-known/x402' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, withCors({ 'Content-Type': 'application/json' }));
     res.end(JSON.stringify(discoveryDoc(), null, 2));
     return;
   }
   if (route === '/llms.txt' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.writeHead(200, withCors({ 'Content-Type': 'text/plain; charset=utf-8' }));
     res.end(LLMS_TXT);
     return;
   }
   const product = PRODUCTS[route];
   if (!product) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(404, withCors({ 'Content-Type': 'application/json' }));
     res.end(JSON.stringify({ error: 'not found', products: Object.keys(PRODUCTS) }));
     return;
   }
   if (req.method === 'GET' && url.searchParams.get('quote') === '1') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ accepts: [payRequirements(route, product)] }));
+    res.writeHead(200, withCors({ 'Content-Type': 'application/json' }));
+    res.end(JSON.stringify({ accepts: [payRequirements(route, product)], energy: typicalEnergy(product) }));
     return;
   }
   const paymentPayload = parseXPayment(req);
@@ -218,7 +421,9 @@ const server = http.createServer(async (req, res) => {
       send402(res, route, product); return;
     }
     const input = await readBody(req);
-    const result = await product.handler(input);
+    const t0 = Date.now();
+    const result = await product.handler(input.body);
+    const elapsedMs = Date.now() - t0;
     const s = await facilitator('/settle', { paymentPayload, paymentRequirements });
     const tx = s && (s.transaction || s.txHash);
     if (!tx) {
@@ -226,9 +431,14 @@ const server = http.createServer(async (req, res) => {
       send402(res, route, product); return;
     }
     const payer = (paymentPayload.payload && paymentPayload.payload.authorization && paymentPayload.payload.authorization.from) || '?';
-    console.log(`[paid] ${new Date().toISOString()} ${route} payer=${trunc(payer)} amount=${product.price} tx=${tx}`);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ result, settlement: { transaction: tx, network: CFG.network, payer } }));
+    const energy = estimateEnergyKwh({
+      elapsedMs,
+      bytesIn: input.rawBytes,
+      bytesOut: Buffer.byteLength(JSON.stringify(result)),
+    });
+    console.log(`[paid] ${new Date().toISOString()} ${route} payer=${trunc(payer)} amount=${product.price} tx=${tx} energy=${energy.kwh_human}`);
+    res.writeHead(200, withCors({ 'Content-Type': 'application/json' }));
+    res.end(JSON.stringify({ result, settlement: { transaction: tx, network: CFG.network, payer }, energy }));
   } catch (e) {
     // never leak the result on any failure path
     console.log(`[error] ${new Date().toISOString()} ${route} ${e && e.message}`);
