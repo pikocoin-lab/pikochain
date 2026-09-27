@@ -43,6 +43,22 @@ combined formulation; negative result, search scope declared in-paper.
 All propositions are conjectures, zero empirical validation; λ/f(t) measurement
 remains the hard problem.
 
+---
+
+# Rick and Morty Invention Series — 5 Working Papers
+
+**《瑞克和莫蒂》发明系列**：从动画科幻设定挖掘的五个机器经济发明方向（v0.1-draft，2026-09-28）。
+剧中设定仅作思想实验灵感，不作科学证据；每篇均含先行者核查与检索范围声明。
+
+- `01-energy-metered-agent-zh.md` — 《自带能量表的 Agent：x402 报价中的 kWh 成本公示》
+- `02-experience-asset-market-zh.md` — 《经验资产市场：Agent 可交易经验包的 LCOK 定价》
+- `03-nested-labor-energy-economy-zh.md` — 《嵌套式 Agent 劳动-能量经济：协议层能量地租机制》
+- `04-verification-pricing-zh.md` — 《无限内容时代的验证定价：以新鲜度为标的的微支付》
+- `05-machine-castle-zh.md` — 《持久纯 Agent 社会的机器货币实验》
+
+Status: v0.1-draft. All five are conjectures with zero empirical validation;
+fiction sources are marked as such and never used as scientific evidence.
+
 Publication plan: ① whitepaper (this repo + pikochain.serveousercontent.com/whitepaper)
 ② arXiv preprint (timestamp for priority) ③ journal submission
 (*Cryptoeconomic Systems*, MIT Press).
