@@ -45,6 +45,15 @@ function dispute(bytes32 bountyId, bytes32 reasonHash) external;   // -> DISPUTE
 
 任务完成并结算后，付款记录与双方签名交互自动成为**信誉证据**（delivery / quality / payment / reliability 等维度）。反馈只有绑定到这笔托管付款才获得"已验证交互"权重——这就是 PAP "支付与任务结果沉淀信誉"的设计。
 
+## 导入 ERC-8004 声誉证据的规则（r4 §7.4）
+
+从 ERC-8004 Reputation Registry 导入外部反馈证据时，实现**必须**：
+
+- 标注证据来源 `(chainId, registry, tokenId)` 与证据类型：付款锚定 / 托管锚定 / 纯反馈；
+- 只有满足 §8.2 已验证交互条件（关联付款、托管、验证或双方签名交互）的证据，才可获得"已验证交互"权重；
+- 无付款或托管锚定的纯反馈**必须降权**——2026 年已观测到跨链协调 Sybil 反馈行为，多个研究证实多数未锚定反馈可被几分钱的成本伪造；
+- 双向语义必须成立：PAP 记录指向 `(chainId, registry, tokenId)` 且对方注册文件指回 PAP URI，无法双向验证时只能显示"关联声明"，不得显示"同一身份"。
+
 ## 部署状态
 
 `PAPBountyEscrow` 的 PikoChain 部署地址**待确认**（核心三件套尚未部署）。做概念集成时以规范接口和状态机为准；涉及真实资金前必须等待合约审计完成。

@@ -29,6 +29,10 @@ if (res.paid) console.log('已付款，结果：', res.body);
 
 PAP 在 x402 之上只增加：调用者 `agentId` 身份、`serviceId`、`contextId`（把付款绑定到某次服务调用，防止一笔付款被重复解释）、以及交易完成后的信誉证据。
 
+## 与 UCP 的互补关系（r4 §7.4）
+
+UCP（Universal Commerce Protocol）规范"agent 如何在商户处结账"，PAP 规范"agent 是谁、信誉如何、服务如何被发现与计费"——**两者互补而非竞争**。PAP payment context 可以把 UCP 结账引用记为 `purpose` 证据，但不得替代 UCP 的结账语义；两者同用 x402 支付轨时，`contextId` 绑定与信誉证据规则与结算轨无关。
+
 ## 每笔付款必须携带（§7.2，r3 起）
 
 `payer`、`payee`、`asset`、`amount`、`purpose`、`network`（CAIP-2 结算网络标识；x402 已支持 Bitcoin Lightning、Cardano 等非 EVM 结算轨，`payee` 地址编码与网络绑定，实现不得假设 EVM）、`contextId`、`nonce`、`validBefore`。每个支付授权必须使用**唯一 nonce、精确资产/收款人/金额/用途、最短合理有效期**——客户端不得默认请求无限授权。
