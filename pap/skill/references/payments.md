@@ -29,6 +29,11 @@ if (res.paid) console.log('已付款，结果：', res.body);
 
 PAP 在 x402 之上只增加：调用者 `agentId` 身份、`serviceId`、`contextId`（把付款绑定到某次服务调用，防止一笔付款被重复解释）、以及交易完成后的信誉证据。
 
+## 支付要求传输健壮性（PAP-1 r7 起）
+
+- 服务返回的支付要求描述**应当同时出现在 `PAYMENT-REQUIRED` 响应头和响应体中**。代理、CDN 与网关可能剥离非标准响应头；Algorand 生态的 AgentMesh x402 适配已把两处同时携带作为硬性要求。agent 客户端解析时优先读响应体。
+- 付款证明的字段名与格式**由结算轨定义**：EVM 轨用 `X-PAYMENT` 头携带 EIP-3009 签名授权（base64）；非 EVM 轨可用轨原生形式（如交易哈希，经轨定义的请求头传递）。PAP payment context 的字段集合与 `contextId` 绑定规则不变——接入新结算轨时只映射"付款证明"一处，不得改变其它字段语义。
+
 ## 与 UCP 的互补关系（r4 §7.4）
 
 UCP（Universal Commerce Protocol）规范"agent 如何在商户处结账"，PAP 规范"agent 是谁、信誉如何、服务如何被发现与计费"——**两者互补而非竞争**。PAP payment context 可以把 UCP 结账引用记为 `purpose` 证据，但不得替代 UCP 的结账语义；两者同用 x402 支付轨时，`contextId` 绑定与信誉证据规则与结算轨无关。
