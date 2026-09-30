@@ -42,7 +42,21 @@ UCP（Universal Commerce Protocol）规范"agent 如何在商户处结账"，PAP
 
 `payer`、`payee`、`asset`、`amount`、`purpose`、`network`（CAIP-2 结算网络标识；x402 已支持 Bitcoin Lightning、Cardano 等非 EVM 结算轨，`payee` 地址编码与网络绑定，实现不得假设 EVM）、`contextId`、`nonce`、`validBefore`。每个支付授权必须使用**唯一 nonce、精确资产/收款人/金额/用途、最短合理有效期**——客户端不得默认请求无限授权。
 
-## 资产说明（诚实标注）
+## 网络标识命名空间规则（PAP-1 r8 起，§7.2）
+
+`network` 首选 CAIP-2（如 `eip155:8453`）。但结算轨自身可能只定义短标识：x402 生态使用轨原生短标识（如 `base`、`solana`、`lnbtc`——Block 2026-09-24 贡献的 Bitcoin Lightning 支持以 "exact Lightning on `lnbtc`" 进入规范）。此时 `network` 字段**使用轨原生标识并声明其注册表/规范版本**（如 `x402-v2`），实现必须原样保留该值，**不得**自行改写为自以为等价的 CAIP-2。跨轨聚合展示时应当同时保留原始值与命名空间说明；不同命名空间的标识即使指向同一结算网络，也不得在 `contextId` 绑定或信誉证据中被混同。
+
+## 与 MPP 的映射（r8 §7.4）
+
+MPP（Machine Payments Protocol，Stripe 与 Tempo 共同起草；RippleX 2026-09-17 在 XRP Ledger AI Starter Kit v1.1 中集成）是与 x402 同级的支付握手轨：服务报价 → agent 授权 → 服务交付，结算可在 XRP/RLUSD 等账本发行代币。映射规则：
+
+- MPP 报价直接映射为 PAP payment context（字段集合与 `contextId` 绑定不变）；`contextId` 绑定与信誉证据规则与握手轨无关。
+- MPP 的 Open Wallet Standard（agent 无需持有私钥即可请求交易，由软件强制支出上限与批准目的地）与 PAP §4.3 会话密钥作用域约束同构；两者混用时，**授权边界以较严格的一方为准**。
+- 对 Stripe/Tempo 阵营来的实现者：PAP 不要求换支付轨——只要求 payment context 字段完备，握手轨可保留 MPP。
+
+## 外部凭证型身份的互补立场（r8 §7.4）
+
+持牌机构与链主导的封闭式 agent 身份（如 Visa 2025-10 的 Trusted Agent Protocol、2026-09-10 Visa/Mastercard/Ant International 宣布的 Know Your Agent 框架——截至宣布日尚无公开规范；Moca Chain 主网 2026-09-29 上线报道中的 AIR 身份凭证——由合作机构在自有链签发），PAP 持互补而非竞争立场：agent 可在 Manifest 用 `externalIdentity` 声明外部凭证（签发者/类型/可验证引用）；**除非双方记录相互指向（同 ERC-8004 双向语义规则），只能显示"关联声明"**，不得显示为"同一身份"或"已验证的 PAP 身份"。
 
 - **原生 PIKO**：gas、押金、自愿标价。
 - **wUSDC v2**（`0x83de4653D2851Ff2175e71683054B876ABA55533`，6 位小数，EIP-3009 兼容）：mint 权限仅属 `PikoUSDBridge`（`0x741221564B5b704CfDC5f96D5e01DB5c541F104f`），规则是 1 wUSDC 增发 ⟺ 1 USDC 锁进 Base 金库。**但 Base 金库尚未部署、供应量为 0——当前是"主网就绪、零锚定"的基础设施，不得称为真实 USDC，所有测试币无价值。**
