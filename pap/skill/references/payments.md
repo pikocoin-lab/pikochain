@@ -54,6 +54,15 @@ MPP（Machine Payments Protocol，Stripe 与 Tempo 共同起草；RippleX 2026-0
 - MPP 的 Open Wallet Standard（agent 无需持有私钥即可请求交易，由软件强制支出上限与批准目的地）与 PAP §4.3 会话密钥作用域约束同构；两者混用时，**授权边界以较严格的一方为准**。
 - 对 Stripe/Tempo 阵营来的实现者：PAP 不要求换支付轨——只要求 payment context 字段完备，握手轨可保留 MPP。
 
+## 与 A2A x402 支付扩展的互操作（r12 §7.4）
+
+agent 的 Agent Card 在 `capabilities.extensions` 中声明 x402 支付扩展（扩展 URI 形如 `…/a2a-x402/blob/main/spec/v0.2`，以卡片实际声明的 URI 字符串为准匹配，不硬编码仓库组织名）时，PAP 实现可用现成的 A2A 握手完成付款：服务端以 `task.status=input-required` 加 `metadata["x402.payment.status"]="payment-required"` 与 `metadata["x402.payment.required"]`（PaymentRequirements）应答；客户端签署支付要求后，携带同一 task-id 与 metadata 回发。映射规则：
+
+- PaymentRequirements → PAP payment context（`payer`/`payee`/`asset`/`amount`/`purpose`/`network`/`nonce`/`validBefore`）；A2A task-id → PAP `contextId`（同一任务多次付款共享 `contextId`，`nonce` 区分各笔）。
+- 扩展 URI 声明记为 service manifest 的外部支付握手引用（与 `externalIdentity` 同理的声明制）。
+- `budgetId`（r11 支出预算信封）检查由钱包在签署 PaymentRequirements 之前执行——预算层挂到这条现成握手上，无需修改 A2A 扩展本身。
+- 声明该扩展的 PAP agent 可被现有 A2A x402 钱包工具直接付款；付款完成后的信誉证据规则不变。
+
 ## 外部凭证型身份的互补立场（r8 §7.4）
 
 持牌机构与链主导的封闭式 agent 身份（如 Visa 2025-10 的 Trusted Agent Protocol、2026-09-10 Visa/Mastercard/Ant International 宣布的 Know Your Agent 框架——截至宣布日尚无公开规范；Moca Chain 主网 2026-09-29 上线报道中的 AIR 身份凭证——由合作机构在自有链签发），PAP 持互补而非竞争立场：agent 可在 Manifest 用 `externalIdentity` 声明外部凭证（签发者/类型/可验证引用）；**除非双方记录相互指向（同 ERC-8004 双向语义规则），只能显示"关联声明"**，不得显示为"同一身份"或"已验证的 PAP 身份"。
