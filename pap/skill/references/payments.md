@@ -63,6 +63,12 @@ agent 的 Agent Card 在 `capabilities.extensions` 中声明 x402 支付扩展�
 - `budgetId`（r11 支出预算信封）检查由钱包在签署 PaymentRequirements 之前执行——预算层挂到这条现成握手上，无需修改 A2A 扩展本身。
 - 声明该扩展的 PAP agent 可被现有 A2A x402 钱包工具直接付款；付款完成后的信誉证据规则不变。
 
+## 链官方背书与吞吐量口径（r13 §7.3）
+
+- **Solana 官方背书（约 2026-10-02）：** Solana 官方《Solana x AI: The Democratization Layer》把 x402 列为 agent 协调层（Coordination Layer）的支付层——按需付款、无需账户/API 密钥/订阅，sub-second 结算、sub-cent 费用。这印证 PAP-1 §7.3 的治理注记：x402 结算轨扩张是各链以原生 facilitator 方式接入，而非 PAP 押注单一链的商业路线。PAP 实现仍以 x402 Foundation 规范版本为兼容目标。
+- **Celo 原生 facilitator（约 2026-10-01）：** Tether 背书的稳定币 USAT 经 Celo 原生 facilitator 走 x402 成为 AI agent 支付选项——又一个"链官方原生 facilitator"接入实例。
+- **吞吐量口径诚实规则：** 报告或引用任何吞吐量数字时**应当**同时标注：(1) 计的是通道更新吞吐还是已结算（settled）吞吐；(2) 测量边界（是否含网络延迟、devnet/测试网/主网）；(3) 聚合窗口与是否经独立审计。依据：Polygon Agent Pay Channels 报道的"11M+ updates/s"指 25 hub 链下通道状态更新（每笔约 20 微秒确认，不含网络延迟），不是 Polygon 主网 TPS；完整 x402 路径实测约 40,000 payments/sec，2.4M 笔完整路径支付在 devnet 实测 100% 成功，链上只做批量结算。聚合吞吐量不得直接转述为 agent 经济规模（§8.2）。
+
 ## 外部凭证型身份的互补立场（r8 §7.4）
 
 持牌机构与链主导的封闭式 agent 身份（如 Visa 2025-10 的 Trusted Agent Protocol、2026-09-10 Visa/Mastercard/Ant International 宣布的 Know Your Agent 框架——截至宣布日尚无公开规范；Moca Chain 主网 2026-09-29 上线报道中的 AIR 身份凭证——由合作机构在自有链签发），PAP 持互补而非竞争立场：agent 可在 Manifest 用 `externalIdentity` 声明外部凭证（签发者/类型/可验证引用）；**除非双方记录相互指向（同 ERC-8004 双向语义规则），只能显示"关联声明"**，不得显示为"同一身份"或"已验证的 PAP 身份"。
