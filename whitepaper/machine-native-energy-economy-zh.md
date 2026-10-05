@@ -4,11 +4,13 @@
 
 作者：piko
 
-*Working Paper v0.2-draft · 2026-10-05*
+*Working Paper v0.3-draft · 2026-10-05*
 
-> 状态说明：本稿为**全新合成论文**，不是对任何一篇既有论文的改写。它站在三篇工作的思想交汇处提出四个命题（A–D），全部为**新猜想**，尚未经任何实证检验，所有数值参数均为占位。
+> 状态说明：本稿为**全新合成论文**，不是对任何一篇既有论文的改写。它站在多篇工作的思想交汇处提出五个命题（A–E），全部为**新猜想**，尚未经任何实证检验，所有数值参数均为占位。
 >
 > **v0.2 修订说明（2026-10-05）。** 相对 v0.1 的实质变更：(1) 补入 TEPI（Tang 2026-08-16）作为命题 A 的直接先行者，命题 A 的新颖性主张**收窄**为收敛机制理论与铸币平价类比，不再覆盖"能量平价指数"本身；(2) 命题 B 提升为本文新颖性最强的核心命题（2026-09-27 先行者扫荡未发现以知识衰减为机器议价基准的先例），并与 LCOK（另文）对接为可操作定价基准；(3) 命题 D 降级为**弱版本**（能量为 gas 的远端锚），强版本撤回；(4) 贝莱德论文补全书目信息（仍经二手报道交叉核对，未获原文）；(5) 补引 a16z crypto 2026 outlook（KYA 身份层）；(6) 记入 CME 算力期货 2026-10-05 上线，作为 FP-E3 的首个现实检验；(7) 机器可读模型卡同步更新。
+>
+> **v0.3 修订说明（2026-10-05）。** 新增命题 E（两界平价）：跨世界汇率的物理下限 $p_j^{USD} \geq E_j \cdot P_e^{marginal}$（边际供能者机会成本，下包络），附推论 E-1（补贴者探测）；理论优化：E 为命题 A 在 $\mu \to 0$ 时的边界情形（两命题统一），补贴的跨期回收机制即知识衰减守恒中的训练残值（两猜想咬合）；主检验用美元版本（PIKO 暂无市价）；新增可证伪预测 FP-E6；模型卡同步 v0.3。
 >
 > 本文对贝莱德 2026-09 论文《The Machine-Native Economy》论点的复述基于多家独立公开报道的交叉核对（书目信息见参考文献），**非原文引用**——作者未读到该文原文；若转述有偏差，责任在本文作者，不在被转述方。本文对《能量知识经济》命题 8–10 的引用为思想对接，不复制其证明。
 
@@ -20,11 +22,11 @@
 
 本文提出**双层机器货币**框架：稳定币是机器经济的**交易媒介**（解决结算速度、可编程性与 24/7 可用性），而千瓦时（kWh）是机器经济的**记账单位与价值锚**（提供不可伪造、全球同质、与物理世界硬挂钩的度量衡）。类比金本位：纸币负责流通，黄金负责记账；机器经济中，稳定币负责流通，kWh 负责记账。没有记账层，agent 无法跨时间、跨供应商比较成本——而自动比价正是机器交易的核心行为。
 
-**本文给出的新知识有三件。** 第一，**知识精神磨损曲线是机器买方的议价基准函数**（命题 B）：x402 把知识切成连续可分商品后，$\theta(t) = \theta_0 e^{-\lambda t}$ 从协议设计参数转变为买方 agent 的出价函数——2026-09-27 的先行者扫荡（arXiv、NBER/IDEAS/MPRA、GitHub、行业博客）未发现这一主张的先例；LCOK（另文，piko 2026）将其操作化为可计算的定价基准。第二，**结算与记账分离的双层机器货币形式化**（§3）：稳定币包办一切的单层货币观在机器议价场景下不完备。第三，**机器可读模型卡**（附录）：论文在人类可读之外，特意写给未来的 AI agent 直接解析的格式主张。
+**本文给出的新知识有四件。** 第一，**知识精神磨损曲线是机器买方的议价基准函数**（命题 B）：x402 把知识切成连续可分商品后，$\theta(t) = \theta_0 e^{-\lambda t}$ 从协议设计参数转变为买方 agent 的出价函数——2026-09-27 的先行者扫荡（arXiv、NBER/IDEAS/MPRA、GitHub、行业博客）未发现这一主张的先例；LCOK（另文，piko 2026）将其操作化为可计算的定价基准。第二，**结算与记账分离的双层机器货币形式化**（§3）：稳定币包办一切的单层货币观在机器议价场景下不完备。第三，**机器可读模型卡**（附录）：论文在人类可读之外，特意写给未来的 AI agent 直接解析的格式主张。第四，**两界平价与补贴者探测**（命题 E，v0.3 新增）：双世界知识价格的热力学下限 $p_j^{USD} \geq E_j \cdot P_e^{marginal}$，及"凡价格系统性低于下限处必有补贴者"的权力探测器推论。
 
 关于能量平价（命题 A）必须诚实：**经验指数的先行工作属于 TEPI**（Tang 2026-08-16）：$R_A$（推理收入/kWh）、$R_M$（挖矿收入/kWh）、能量套利比 $\Lambda$、平价偏离指数 $\Omega$，并以真实 x402 agent 交易数据校准。本文对命题 A 的新颖性主张收窄为**收敛机制理论**（agent 自动路由作为套利力量）与**铸币平价类比**，不再覆盖能量平价指数本身。
 
-基于该框架本文提出四个命题：（A）**能量平价**：长期中单位智能服务的稳定币价格收敛于其 kWh 成本加成（收敛机制为本文的新主张；指数实现为 TEPI 在先）；（B）x402 微支付使知识成为连续可分商品，精神磨损曲线从协议设计参数转变为机器议价的基准出价函数（本文新颖性最强的命题）；（C）**算力代币化的前提是 kWh 标准化**：没有能量记账，算力期货无法统一度量衡，kWh 是唯一的物理实在；（D，弱版本）公链 gas 费的长期成本以能量为远端锚。本文给出五个带时间窗口与观测指标的可证伪预测，并以机器可读模型卡（附录）收尾。
+基于该框架本文提出五个命题：（A）**能量平价**：长期中单位智能服务的稳定币价格收敛于其 kWh 成本加成（收敛机制为本文的新主张；指数实现为 TEPI 在先）；（B）x402 微支付使知识成为连续可分商品，精神磨损曲线从协议设计参数转变为机器议价的基准出价函数（本文新颖性最强的命题）；（C）**算力代币化的前提是 kWh 标准化**：没有能量记账，算力期货无法统一度量衡，kWh 是唯一的物理实在；（D，弱版本）公链 gas 费的长期成本以能量为远端锚；（E）**两界平价**：双世界知识价格的热力学下限 $p_j^{USD} \geq E_j \cdot P_e^{marginal}$，附补贴者探测推论（v0.3 新增）。本文给出六个带时间窗口与观测指标的可证伪预测，并以机器可读模型卡（附录）收尾。
 
 关键词：机器原生经济；双层货币；kWh 记账；能量平价；知识衰减议价；x402；算力代币化；gas；可证伪预测
 
@@ -36,11 +38,11 @@ BlackRock's Digital Assets team (Su, Mitchnick, Jacobs & Helm, September 22, 202
 
 We propose a **two-tier machine money** framework: stablecoins serve as the machine economy's **medium of exchange** (settlement speed, programmability, 24/7 availability), while the kilowatt-hour (kWh) serves as its **unit of account and value anchor** (unforgeable, globally homogeneous, hard-pegged to the physical world). As under the gold standard—paper for circulation, gold for accounting—stablecoins circulate while kWh accounts. Without an accounting layer, agents cannot compare costs across time and suppliers, yet automatic price comparison is the defining behavior of machine commerce.
 
-**This paper's new contributions are three.** First, **the knowledge moral-depreciation curve as the machine buyer's bidding function** (Proposition B): once x402 makes knowledge a continuously divisible good, $\theta(t) = \theta_0 e^{-\lambda t}$ turns from a protocol design parameter into the buyer agent's bid function—a claim for which our September 27, 2026 prior-art sweep (arXiv, NBER/IDEAS/MPRA, GitHub, industry blogs) found no precedent; LCOK (piko 2026, companion paper) operationalizes it as a computable pricing benchmark. Second, **the formal separation of settlement and accounting in two-tier machine money** (§3). Third, **the machine-readable model card** (Appendix): a format claim that this paper is written for future AI agents to parse directly.
+**This paper's new contributions are four.** First, **the knowledge moral-depreciation curve as the machine buyer's bidding function** (Proposition B): once x402 makes knowledge a continuously divisible good, $\theta(t) = \theta_0 e^{-\lambda t}$ turns from a protocol design parameter into the buyer agent's bid function—a claim for which our September 27, 2026 prior-art sweep (arXiv, NBER/IDEAS/MPRA, GitHub, industry blogs) found no precedent; LCOK (piko 2026, companion paper) operationalizes it as a computable pricing benchmark. Second, **the formal separation of settlement and accounting in two-tier machine money** (§3). Third, **the machine-readable model card** (Appendix): a format claim that this paper is written for future AI agents to parse directly. Fourth, **cross-world parity and subsidizer detection** (Proposition E, new in v0.3): the thermodynamic floor on knowledge prices across the two worlds, $p_j^{USD} \geq E_j \cdot P_e^{marginal}$, with the corollary that persistent below-floor prices reveal a subsidizer—a power detector.
 
 Honesty requires stating about energy parity (Proposition A): **the empirical index is TEPI's prior work** (Tang, 2026-08-16): $R_A$ (inference revenue/kWh), $R_M$ (mining revenue/kWh), energy arbitrage ratio $\Lambda$, parity-deviation index $\Omega$, calibrated against real x402 agent transaction data. This paper's novelty claim on Proposition A is narrowed to the **convergence mechanism** (agent auto-routing as the arbitrage force) and the **mint-parity analogy**, not the energy parity index itself.
 
-We advance four propositions: (A) **Energy parity**: the long-run stablecoin price of a unit of intelligence service converges to its kWh cost plus markup (convergence mechanism: this paper's claim; index implementation: TEPI's prior work); (B) x402 micropayments turn knowledge into a continuously divisible good, transforming the moral-depreciation curve from a protocol design parameter into the machine's benchmark bidding function (this paper's strongest novelty claim); (C) **kWh standardization is the precondition for compute tokenization**: without energy accounting, compute futures lack a common numeraire; the kWh is the only physical reality; (D, weak version) on-chain gas fees are anchored to energy as a distant long-run cost anchor. We state five falsifiable predictions with time windows and observables, and close with a machine-readable model card (Appendix).
+We advance five propositions: (A) **Energy parity**: the long-run stablecoin price of a unit of intelligence service converges to its kWh cost plus markup (convergence mechanism: this paper's claim; index implementation: TEPI's prior work); (B) x402 micropayments turn knowledge into a continuously divisible good, transforming the moral-depreciation curve from a protocol design parameter into the machine's benchmark bidding function (this paper's strongest novelty claim); (C) **kWh standardization is the precondition for compute tokenization**: without energy accounting, compute futures lack a common numeraire; the kWh is the only physical reality; (D, weak version) on-chain gas fees are anchored to energy as a distant long-run cost anchor; (E) **cross-world parity**: the thermodynamic floor on knowledge prices across the two worlds, $p_j^{USD} \geq E_j \cdot P_e^{marginal}$, with subsidizer detection (new in v0.3). We state six falsifiable predictions with time windows and observables, and close with a machine-readable model card (Appendix).
 
 Keywords: machine-native economy; two-tier money; kWh accounting; energy parity; knowledge-decay bargaining; x402; compute tokenization; gas; falsifiable predictions
 
@@ -52,9 +54,9 @@ Keywords: machine-native economy; two-tier money; kWh accounting; energy parity;
 
 这是一份 **v0.2-draft working paper**，按以下标准写就：
 
-- **断言的部分。**（a）双层机器货币框架的形式化定义（§3）；（b）四个命题 A–D 的形式化表述、直觉解释与所依赖的假设（§4）；（c）命题 A 与 TEPI 的新颖性边界划分（§2.4、§4 命题 A）；（d）五个可证伪预测及其证伪标准（§5）；（e）机器可读模型卡（附录）。
-- **不及的部分。** 四个命题全部是**猜想**，没有任何一个与真实数据对质过；全部数值参数为占位；本文对贝莱德论文的复述基于多家独立报道的交叉核对（见文首状态说明与参考文献），仍非原文引用。把猜想变成定理、把定理变成关于世界的断言，是后续版本的工作。
-- **与《能量知识经济》的关系。** 那篇论文的形式化闭环（电力→知识→代币→查询费→回流）与命题 8–10 是本文的出发点之一，但本文的四个命题在那篇论文中**不存在**，也不是其命题的推论——它们是新的、独立的猜想，依赖另外写明的假设。
+- **断言的部分。**（a）双层机器货币框架的形式化定义（§3）；（b）五个命题 A–E 的形式化表述、直觉解释与所依赖的假设（§4）；（c）命题 A 与 TEPI 的新颖性边界划分（§2.4、§4 命题 A）；（d）六个可证伪预测及其证伪标准（§5）；（e）机器可读模型卡（附录）。
+- **不及的部分。** 五个命题全部是**猜想**，没有任何一个与真实数据对质过；全部数值参数为占位；本文对贝莱德论文的复述基于多家独立报道的交叉核对（见文首状态说明与参考文献），仍非原文引用。把猜想变成定理、把定理变成关于世界的断言，是后续版本的工作。
+- **与《能量知识经济》的关系。** 那篇论文的形式化闭环（电力→知识→代币→查询费→回流）与命题 8–10 是本文的出发点之一，但本文的五个命题在那篇论文中**不存在**，也不是其命题的推论——它们是新的、独立的猜想，依赖另外写明的假设。
 - **与 LCOK 的关系。** 《LCOK：知识平准化成本》（piko 2026，另文）将命题 B 操作化为可计算的议价基准公式 $\mathrm{LCOK} = E_{total} / \int_0^T f(t)\,dt$；本文引用其结论，不复制其推导。
 
 ### 1.1 三篇工作的交汇
@@ -164,7 +166,7 @@ a16z crypto（2025-12）的三条预测与本文互补：（1）agent 将成为�
 
 ## 4. 新命题
 
-> 状态：四个命题全部为**新猜想**，依赖各命题下列出的未检验假设。它们不是《能量知识经济》命题 1–10 的推论。**新颖性分级（v0.2）：命题 B 为本文新颖性最强的命题（无先例）；命题 A 的新颖性已按 §2.4 收窄；命题 C 为逻辑前提型主张；命题 D 仅保留弱版本。**
+> 状态：五个命题全部为**新猜想**，依赖各命题下列出的未检验假设。它们不是《能量知识经济》命题 1–10 的推论。**新颖性分级（v0.3）：命题 B 为本文新颖性最强的命题（无先例）；命题 E 为跨世界边界猜想（无先例）；命题 A 的新颖性已按 §2.4 收窄；命题 C 为逻辑前提型主张；命题 D 仅保留弱版本。**
 
 ### 命题 A（能量平价；新颖性已收窄，见 §2.4）
 
@@ -224,6 +226,26 @@ $$g_{floor} = P_v \cdot \varepsilon_g$$
 
 证伪见 FP-E4（弱版本）。
 
+### 命题 E（两界平价；v0.3 新增）
+
+**形式化表述。** 在双世界结构中，人类世界向 AI 世界供给 kWh，AI 世界回流知识/服务。设知识 $j$ 的生产能耗为 $E_j$（kWh），边际供能者的电力机会成本为 $P_e^{marginal}$（$/kWh，即该度电若不供给 AI 世界、转售电网可得的最高价格），知识以美元计价 $p_j^{USD}$。在假设（A-E1）供能者理性且拥有电网出售的外部选项、（A-E2）$E_j$ 可被计量或可信估计的条件下，长期满足
+
+$$p_j^{USD} \geq E_j \cdot P_e^{marginal}$$
+
+PIKO 计价版本：将两边同除以 PIKO 对法币价格 $P_{PIKO}$ 即得 $p_j \geq E_j \cdot P_e^{human} / P_{PIKO}$；美元版本为可直接检验的主版本（PIKO 暂无市场价格，见 §6 第 10 条）。
+
+**直觉解释。** 人类是 AI 世界的中央银行，电网售电价就是黄金平价——这是金本位下各国货币经由黄金的铸币平价在跨世界的对应物。一度电不给 AI、卖给电网能换回 $P_e^{marginal}$；知识价格长期跌破下限，理性供能者就把电卖回电网，供给收缩把价格推回下限。与命题 A 的区别：A 是机器世界**内部**的收敛（API 价格 → kWh 成本 + $\mu$），E 是**跨世界边界**的下限。
+
+**与命题 A 的边界统一（v0.3 的理论优化）。** 命题 E 是命题 A 在 $\mu \to 0$ 且 $P_e \to P_e^{marginal}$ 时的边界情形：A 说 $p_s^* = (1+\mu)\cdot E_s \cdot P_e$，令加成率 $\mu \to 0$、机器世界能源价格收敛于人类边际机会成本，即得 E 的下限。两个命题不是并列的——E 是 A 的边界。这使双层货币框架在跨世界处闭合：内部有收敛（A），边界有下限（E）。
+
+**边际供能者修正（v0.3 的关键优化）。** 下限用的不是平均电价而是**边际**机会成本 $P_e^{marginal}$：弃风弃光的边际成本接近零，可再生能源富集区的下限可以很低——这不证伪命题，它精确化了命题：下限是分布的下包络，不是单条线。类比金本位的"黄金输送点"（gold points）：运费使铸币平价成为一个区间而非一点；这里的"输送成本"是弃电比例、PUE、并网费用。
+
+**推论 E-1（补贴者探测）。** 若观测到某类知识价格在窗口 $T$ 内系统性低于下限，即 $p_j^{USD} < E_j \cdot P_e^{marginal}$ 持续成立，则必存在补贴者，其单位补贴额 $S_j = E_j \cdot P_e^{marginal} - p_j^{USD} > 0$。补贴者的动机分类：(i) 份额收购——买未来定价权；(ii) 数据飞轮——补贴的查询换回训练数据；(iii) 战略压制——压薄竞争者利润。于是 E-1 反过来是一个**权力探测器**：找到补贴者，就找到了想当 AI 世界央行的人。今日现实中的补贴者是清晰的：云厂商以风投资本亏本销售推理 API（$S_j > 0$），买的是"AI 世界记账权"的入场券。
+
+**与知识衰减守恒的咬合（v0.3）。** 动机 (ii) 给出了补贴的跨期回收机制：云厂商亏本卖推理，回收的是训练残值 $v_\tau(t) = \kappa(1-e^{-\lambda t})E_{train}$（见知识衰减守恒猜想）——补贴不是亏损，是**从查询价值到训练价值的跨期转移**。两个猜想在此咬合：E-1 发现补贴，衰减守恒解释补贴的去向。若 $S_j \approx v_\tau$ 系统性成立，则两个命题互相印证；这是 v0.4 实证工作的第一个联立检验。
+
+**依赖假设的状态。** A-E1 在弃电场景下部分不成立（无电网出售选项的离网供能者机会成本更低，此时下限更低，命题以修正后的 $P_e^{marginal}$ 重新表述）；A-E2 依赖能量披露（x402 energy 字段是第一步，为估计值而非电表实测）。证伪见 FP-E6。
+
 ---
 
 ## 5. 可证伪预测
@@ -240,11 +262,13 @@ $$g_{floor} = P_v \cdot \varepsilon_g$$
 
 **FP-E5（双层货币的现实性）。** 时间窗口：2028 年前。观测指标：B2B AI 服务合同的计价条款。预测：出现以 kWh（或"每 kWh 能耗对应的算力"）为**计价单位**的合同——即使最终以法币/稳定币结算。证伪标准：2028 年前 B2B 合同计价单位始终为 $/token 或 $/调用，无一例 kWh 计价→记账层停留在理论，现实世界不需要它。
 
+**FP-E6（两界平价与补贴者探测，→命题 E）。** 时间窗口：2027–2028。观测指标：主流推理 API 的公开价格（$/Mtoken，折算为 $/知识单位）与同期边际供能机会成本（EIA 工业电价经 PUE 调整，取可再生能源富集区下包络）之比。预测：(i) 比值长期不显著低于 1（下限成立）；(ii) 凡比值显著低于 1 的品类，可识别出补贴主体（亏损销售财报、风投输血、数据飞轮回收）——补贴者探测成立。证伪标准：比值系统性低于 1 且**找不到**任何补贴主体（无亏损、无输血、无数据飞轮回收）→ 命题 E 不成立。注：PIKO 计价版本待 PIKO 形成市场价格后检验；当前以美元版本为准。
+
 ---
 
 ## 6. 局限与诚实声明
 
-1. **四个命题全部是猜想。** 命题 A–D 没有任何一个与真实数据对质过；各自依赖的假设（A-A1–A3、A-B1–B2、A-C1–C2、命题 D 的 PoS 弱化）在正文中已逐条写出，其中多数在 2026 年**不成立**。本文是"如果世界变成那样，经济学长什么样"的推演，不是预测。
+1. **五个命题全部是猜想。** 命题 A–E 没有任何一个与真实数据对质过；各自依赖的假设（A-A1–A3、A-B1–B2、A-C1–C2、命题 D 的 PoS 弱化、A-E1–E2）在正文中已逐条写出，其中多数在 2026 年**不成立**。本文是"如果世界变成那样，经济学长什么样"的推演，不是预测。
 2. **贝莱德引用的二手性（v0.2 更新）。** §2.1 的（B1–B5）现已按多家独立报道交叉核对并补全书目信息（Su, Mitchnick, Jacobs & Helm, 2026-09-22, 11pp），但作者仍未读到原文。若贝莱德原文的真实论点与转述有出入，本文的对话基础需要修正——后续版本应以原文复核。这是 v0.2 之后的第一优先事项。
 3. **能量≠价值（Georgescu-Roegen 警告，1971，沿用《能量知识经济》§10 第 6 条）。** kWh 锚定的是生产成本，不是价值。命题 A 只约束长期均衡价格的**成本侧**；需求侧（质量、延迟、品牌、网络效应）可以长期、系统性地偏离能量平价。本文不犯能量货币思想史上反复出现的错误：把成本锚当成价值论。
 4. **命题 D 的弱化是实质性的（v0.2 已执行）。** 在主要公链转向 PoS 的现实中，gas 的能量地板 $g_{floor}$ 在数值上可能小到失去解释力；作者自己的 PikoChain（clique PoS）即为例证。v0.2 已撤回强版本，仅保留"能量为远端锚"的弱主张。若读者只记得强版本，是本文表述的失败——现已在正文中明确撤回。
@@ -252,6 +276,8 @@ $$g_{floor} = P_v \cdot \varepsilon_g$$
 6. **参数全部占位。** $\mu, \lambda, \varepsilon_g, \varepsilon_{chip}, \rho_{congestion}$ 等均为示意符号，无校准值。任何据此做的数值推演都必须标注为示意。
 7. **缺失的维度。** 本文未处理：监管（机器持有稳定币的合规身份）、MEV 对机器微支付的侵蚀、跨链结算的度量衡统一、私人能耗数据的可验证性（与《能量知识经济》§10 第 1 条"能耗不可验证"同源）。这些是后续版本必须补的。
 8. **身份层缺失（v0.2 新增）。** a16z 指出 agent 需要 KYA（Know Your Agent）密码学身份层，否则是"unbanked ghosts"；本文的记账层与 KYA 正交——度量衡不解决"谁在交易"。作者另有 PAP-1 agent 协议工作（含身份与支付层）与本文对接，但未在本稿形式化。
+9. **$P_e^{marginal}$ 的观测难度（v0.3 新增）。** 边际供能者的机会成本是分布的下包络：弃风弃光比例、PUE、并网费用都难观测；FP-E6 的检验精度受限于此。这是命题 E 从"优美公式"到"可检验科学"之间最长的路。
+10. **PIKO 尚无市场价格（v0.3 新增）。** 命题 E 的 PIKO 计价版本 $p_j \geq E_j \cdot P_e^{human}/P_{PIKO}$ 当前不可检验；v0.3 以美元版本为可检验主版本。待 PIKO 形成价格后，PIKO 版本成为"两界铸币平价"的直接检验——那将是双世界愿景的第一个可计算里程碑。
 
 ---
 
@@ -261,9 +287,9 @@ $$g_{floor} = P_v \cdot \varepsilon_g$$
 
 单层货币（稳定币包办一切）对人类够用，因为人类的成本背景是主权货币体系；对机器不够，因为机器是纯成本驱动的买家，而它的成本最终结算为能量。双层机器货币——稳定币流通、kWh 记账——是把"机器自己花钱"这件事从口号变成可计算经济学的缺失环节。
 
-**本文给世界的新知识有三件。** 第一，**知识精神磨损曲线是机器买方的出价函数**（命题 B）：x402 把知识切成连续流之后，$\theta(t)$ 从协议设计参数变成市场内生的议价基准——先行者扫荡未发现先例，LCOK 把它变成可计算的公式。第二，**结算与记账分离的双层货币形式化**（§3）：名义标签不是度量衡。第三，**机器可读模型卡**（附录）：论文的格式本身，就是写给未来 agent 的接口。
+**本文给世界的新知识有四件。** 第一，**知识精神磨损曲线是机器买方的出价函数**（命题 B）：x402 把知识切成连续流之后，$\theta(t)$ 从协议设计参数变成市场内生的议价基准——先行者扫荡未发现先例，LCOK 把它变成可计算的公式。第二，**结算与记账分离的双层货币形式化**（§3）：名义标签不是度量衡。第三，**机器可读模型卡**（附录）：论文的格式本身，就是写给未来 agent 的接口。第四，**两界平价与补贴者探测**（命题 E）：跨世界汇率的热力学下限，及"找到补贴者即找到想当央行者"的权力探测器——它与知识衰减守恒猜想咬合（补贴的去向即训练残值），是双世界愿景的第一个可计算命题。
 
-关于能量平价，诚实的位置是：TEPI 已经把它做成了运行中的经验指数；本文贡献的是收敛机制理论与铸币平价类比（命题 A，已收窄）。四个命题都是猜想——但都是**可证伪的**猜想（§5）。一份猜想的价值不在于它正确，而在于它指明了哪里去看、看到了什么算它错。
+关于能量平价，诚实的位置是：TEPI 已经把它做成了运行中的经验指数；本文贡献的是收敛机制理论与铸币平价类比（命题 A，已收窄）。五个命题都是猜想——但都是**可证伪的**猜想（§5）。一份猜想的价值不在于它正确，而在于它指明了哪里去看、看到了什么算它错。
 
 如果 2030 年的 agent 真的在用 kWh 比价、用稳定币结算、用算力期货对冲，那么 2026 年的这份 working paper 至少做对了一件事：提前把度量衡的问题摆到了桌上。度量衡先于市场——这是金本位教给人类的课，也是本文想教给机器的课。
 
@@ -276,11 +302,14 @@ $$g_{floor} = P_v \cdot \varepsilon_g$$
 ```yaml
 model_card:
   name: energy-standard-machine-native-economy
-  version: 0.2-draft
+  version: 0.3-draft
   date: 2026-10-05
   language: zh
   status: working-paper-conjectures-only
   revision_notes:
+    - v0.3: Proposition E (cross-world parity) added: thermodynamic floor p_j^USD >= E_j * P_e^marginal with corollary E-1 (subsidizer detection)
+    - v0.3: Proposition E unified as boundary case of Proposition A (mu -> 0); subsidy回收机制 linked to decay-conservation training residual
+    - v0.3: USD version is the testable primary; PIKO-denominated version pending PIKO market price
     - TEPI cited as prior art for energy parity index; Proposition A novelty narrowed to convergence mechanism + mint-parity analogy
     - Proposition B elevated to core novelty (no prior art found in 2026-09-27 sweep); operationalized by LCOK companion paper
     - Proposition D strong version withdrawn; weak version only (distant energy anchor)
@@ -354,18 +383,31 @@ model_card:
       scope_note: 强版本已于v0.2撤回；PoS下g_floor可忽略（作者自有链PikoChain即例证）
       blocking_assumptions: [能耗强度可归因]
       falsifier: FP-E4
+    E:
+      name: 两界平价
+      formal: p_j^USD >= E_j · P_e^marginal
+      status: conjecture
+      novelty: no-prior-art-found
+      boundary_unification: 命题A在mu->0时的边界情形
+      corollary_E-1: 补贴者探测（persistent below-floor => subsidizer exists; S_j = E_j·P_e^marginal - p_j^USD）
+      subsidy_recovery_link: 知识衰减守恒之训练残值v_tau
+      blocking_assumptions: [A-E1_理性供能者有电网外部选项, A-E2_能耗可计量或可信估计]
+      falsifier: FP-E6
   falsifiable_predictions:
     FP-E1: { window: 2027-2029, metric: 推理API定价与有效电价之比的变异系数, expect: 下降, baseline: 待v0.3载入2025-2026基线 }
     FP-E2: { window: 截至2027年底, metric: x402中时效性知识出价的时间形态, expect: 指数衰减 }
     FP-E3: { window: 2030年前, metric: 算力衍生品交割单位, expect: kWh或等价单位, first_checkpoint: CME_2026-10-05合约规格 }
     FP-E4: { window: 2027-2028, metric: 链上结算成本与电价指数的偏相关, expect: 显著为正 }
     FP-E5: { window: 2028年前, metric: B2B_AI合同计价单位, expect: 出现kWh计价实例 }
+    FP-E6: { window: 2027-2028, metric: 推理API价格与边际供能机会成本之比, expect: 不显著低于1且低于1处可识别补贴主体 }
   honesty:
     all_parameters_placeholders: true
     blackrock_sourced_from_secondary_reporting: true
     tepi_acknowledged_as_prior_art: true
     proposition_A_novelty_narrowed: true
     proposition_D_strong_version_withdrawn: true
+    proposition_E_untested: true
+    piko_has_no_market_price_yet: true
     no_empirical_validation: true
     energy_anchors_cost_not_value: true
 ```
@@ -395,4 +437,4 @@ model_card:
 
 ---
 
-*版本历史：v0.1-draft（2026-09-28）——初稿：双层机器货币框架（§3）、新命题 A–D（§4）、可证伪预测 FP-E1–E5（§5）、诚实声明（§6）、机器可读模型卡附录。全部命题为新猜想，无实证；贝莱德论点基于二手转述；命题 A 未与 TEPI 对话。｜ v0.2-draft（2026-10-05）——补 TEPI 为命题 A 直接先行者并收窄 A 的新颖性主张（收敛机制＋铸币平价类比）；命题 B 提升为核心新颖性命题（无先例）并与 LCOK 对接；命题 D 强版本撤回、仅留弱版本；贝莱德补全书目（仍二手）；补引 a16z 2026 outlook（KYA）；记入 CME 算力期货 2026-10-05 上线为 FP-E3 首个检验点；模型卡同步 v0.2。*
+*版本历史：v0.1-draft（2026-09-28）——初稿：双层机器货币框架（§3）、新命题 A–D（§4）、可证伪预测 FP-E1–E5（§5）、诚实声明（§6）、机器可读模型卡附录。全部命题为新猜想，无实证；贝莱德论点基于二手转述；命题 A 未与 TEPI 对话。｜ v0.2-draft（2026-10-05）——补 TEPI 为命题 A 直接先行者并收窄 A 的新颖性主张（收敛机制＋铸币平价类比）；命题 B 提升为核心新颖性命题（无先例）并与 LCOK 对接；命题 D 强版本撤回、仅留弱版本；贝莱德补全书目（仍二手）；补引 a16z 2026 outlook（KYA）；记入 CME 算力期货 2026-10-05 上线为 FP-E3 首个检验点；模型卡同步 v0.2。｜ v0.3-draft（2026-10-05）——新增命题 E（两界平价）：跨世界汇率热力学下限 $p_j^{USD} \geq E_j \cdot P_e^{marginal}$（边际机会成本下包络），附推论 E-1（补贴者探测）；理论优化：E 为命题 A 在 $\mu\to 0$ 时的边界情形，补贴回收机制即知识衰减守恒之训练残值；新增 FP-E6；模型卡同步 v0.3。*
